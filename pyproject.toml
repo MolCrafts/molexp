@@ -1,0 +1,16 @@
+[project]
+name = "molexp"
+authors = [
+    { name = "Roy Kid", email = "lijichen365@gmail.com" },
+]
+description = "Workflow management system for simulations and analysis"
+readme = "README.md"
+requires-python = ">3.8"
+version = "0.1.0"
+dependencies = [
+    "metaflow",
+]
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
