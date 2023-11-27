@@ -8,7 +8,7 @@ readme = "README.md"
 requires-python = ">3.8"
 version = "0.1.0"
 dependencies = [
-    "metaflow",
+    "sf-hamilton",
 ]
 [project.optional-dependencies]
 dev = [
