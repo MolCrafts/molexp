@@ -30,6 +30,7 @@ class Experiment:
         self.name = name
         self.description = description
         self.root = Path(root or Path.cwd())
+        print(self.root)
         self.init_workdir()
 
         self.tasks = []
@@ -40,11 +41,12 @@ class Experiment:
         workdir.mkdir(exist_ok=True)
         self.work_dir = workdir
         # write metadata
-        with open(workdir / "readme.md", "w") as f:
+        with open(workdir / f"{self.name}.log", "w") as f:
             f.write(f"# exp: {self.name}\n")
             f.write(f"- time: {ctime()}\n")
             f.write(f"## description:\n")
             f.write(f"{self.description}\n")
+            f.write(' --- \n')
 
     def add_task(self, callable):
         self.tasks.append(callable)
