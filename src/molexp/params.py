@@ -5,6 +5,18 @@
 
 from typing import Sequence
 
+class Param(dict):
+
+    def __str__(self):
+        return '-'.join([f"{k}_{v}" for k, v in self.items()])
+    
+    def __repr__(self):
+        return f"Param({super().__str__()})"
+    
+    @classmethod
+    def from_str(cls, s: str):
+        return cls({k: v for k, v in [kv.split('_') for kv in s.split('-')]})
+
 class Params(list):
     
     def __str__(self):
@@ -29,6 +41,6 @@ class ParamSpace(dict):
         keys = sorted([k for k in self.keys() if k not in exclude])
         values = [self[k] for k in keys]
         return Params(
-            dict(zip(keys, v))
+            Param(zip(keys, v))
             for v in product(*values)
         )
