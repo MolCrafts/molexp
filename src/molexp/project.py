@@ -99,6 +99,7 @@ class Project:
     def execute(self, input:dict, output:list, exp_group: ExperimentGroup | None = None, config={}):
 
         exp_group = exp_group or self.select_all()
+        wa = WorkAt(self.dir)    
         for exp in exp_group:
             dr = (
                 driver.Builder()
@@ -107,8 +108,7 @@ class Project:
                 .with_adapter(CachingGraphAdapter(str(exp.dir)))
                 .build()
             )
-            wa = WorkAt(exp.dir)
-            wa.cd_to()
+            wa.cd_to(exp.dir)
             out = dr.execute(output, inputs=input)
             wa.cd_back()
         return out
