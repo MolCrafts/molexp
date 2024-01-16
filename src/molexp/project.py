@@ -56,7 +56,7 @@ class Project:
 
         expg = ExperimentGroup()
         for param in params:
-            exp = Experiment(str(param), self.dir)
+            exp = Experiment(param, self.dir)
             exp.init()
             expg.append(exp)
             self.meta.write(f"{exp.name}\n")
@@ -96,7 +96,7 @@ class Project:
         self.tasks.append(module)
         return module
 
-    def execute(self, input:dict, output:list, exp_group: ExperimentGroup | None = None, config={}):
+    def execute(self, output:list, exp_group: ExperimentGroup | None = None, config={}):
 
         exp_group = exp_group or self.select_all()
         wa = WorkAt(self.dir)    
@@ -108,6 +108,7 @@ class Project:
                 .with_adapter(CachingGraphAdapter(str(exp.dir)))
                 .build()
             )
+            input = dict(exp.param)
             wa.cd_to(exp.dir)
             out = dr.execute(output, inputs=input)
             wa.cd_back()

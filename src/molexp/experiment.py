@@ -6,14 +6,16 @@
 from pathlib import Path
 import random
 import logging
+from .params import Param
 
 class ExperimentGroup(list):
     pass
 
 class Experiment:
 
-    def __init__(self, name:str, root: None | Path | str):
-        self.name = name
+    def __init__(self, param: Param, root: None | Path | str):
+        self.param = param
+        self.name = str(param)
         self.logger = logging.getLogger(self.name)
         self.root = Path(root)
         self.dir = self.root / self.name
