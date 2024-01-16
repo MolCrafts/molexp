@@ -10,7 +10,7 @@ import textwrap
 import types
 import importlib
 import json
-from typing import Callable
+
 from molexp.utils import WorkAt
 from .params import Params, Param
 from .experiment import Experiment, ExperimentGroup
@@ -57,12 +57,6 @@ class Project:
             exp.load()
             self.expg.append(exp)
         self.logger.info(f"Project {self.name} is loaded from {self.dir}")
-
-    def map(self, func: Callable):
-        result = {}
-        for exp in self.expg:
-            result[exp.name] = func(exp)
-        return result
 
     def exists(self):
         return self.dir.exists()

@@ -7,9 +7,16 @@ from pathlib import Path
 import random
 import logging
 from .params import Param
+from typing import Callable
 
 class ExperimentGroup(list):
     pass
+
+    def map(self, func: Callable):
+        result = {}
+        for exp in self.expg:
+            result[exp.name] = func(exp)
+        return result
 
 class Experiment:
 
