@@ -9,7 +9,8 @@ import shutil
 import textwrap
 import types
 import importlib
-
+import json
+from typing import Callable
 from molexp.utils import WorkAt
 from .params import Params, Param
 from .experiment import Experiment, ExperimentGroup
@@ -30,38 +31,50 @@ class Project:
         self.root = Path(root or Path.cwd())
         self.dir = self.root / self.name
         self.tasks = []
-        self.dag_paths = []
+        self.expg = ExperimentGroup()
         if self.exists():
             self.load()
         else:
             self.init()
-        self.meta = open(self.dir / 'meta.txt', 'w+')
-
-    def __del__(self):
-        self.meta.close()
 
     def init(self):
         self.dir.mkdir(parents=True)
         self.logger.info(f"Project {self.name} is created at {self.dir}")
+        self.meta = {
+            'experiments': []
+        }
         # TODO: add meta data and config
 
+    def __del__(self):
+        with open(self.dir / "meta.json", "w") as f:
+            json.dump(self.meta, f)
+
     def load(self):
-        # TODO: check if dir is a valid project
+        with open(self.dir / "meta.json", "r") as f:
+            self.meta = json.load(f)
+        for exp_name in self.meta['experiments']:
+            exp = Experiment(Param.from_str(exp_name), self.dir)
+            exp.load()
+            self.expg.append(exp)
         self.logger.info(f"Project {self.name} is loaded from {self.dir}")
+
+    def map(self, func: Callable):
+        result = {}
+        for exp in self.expg:
+            result[exp.name] = func(exp)
+        return result
 
     def exists(self):
         return self.dir.exists()
 
     def init_exp(self, params: Params):
 
-        expg = ExperimentGroup()
         for param in params:
             exp = Experiment(param, self.dir)
             exp.init()
-            expg.append(exp)
-            self.meta.write(f"{exp.name}\n")
-
-        return expg
+            self.expg.append(exp)
+            self.meta['experiments'].append(str(param))
+        return self.expg
             
     def select(self, params: Params):
 
