@@ -115,8 +115,8 @@ class Project:
                 .with_adapter(CachingGraphAdapter(str(exp.dir)))
                 .build()
             )
-            input = dict(exp.param)
+            info = {'param': exp.param, 'exp_dir': exp.dir}
             wa.cd_to(exp.dir)
-            out = dr.execute(output, inputs=input)
+            out = dr.execute(output, inputs={'info': info})
             wa.cd_back()
         return out
