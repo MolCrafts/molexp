@@ -31,6 +31,7 @@ class Project:
         self.root = Path(root or Path.cwd())
         self.dir = self.root / self.name
         self.tasks = []
+        self.global_tasks = []
         self.expg = ExperimentGroup()
         if self.exists():
             self.load()
@@ -102,8 +103,28 @@ class Project:
         module = importlib.import_module(f"{self.name}.{module_name}")
         self.tasks.append(module)
         return module
+    
+    def add_global_tasks(self, *modules):
+        for module in modules:
+            self.global_tasks.append(module)
+            if not Path(self.dir / module.__file__).exists():
+                shutil.copy(module.__file__, self.dir)
+
 
     def execute(self, output:list, exp_group: ExperimentGroup | None = None, config={}):
+
+        wa = WorkAt(self.dir)
+        dr = (
+            driver.Builder()
+            .with_modules(*self.tasks)
+            .with_config(config)
+            .with_adapter(CachingGraphAdapter(self.dir))
+            .build()
+        )
+        input = dict()
+        wa.cd_to(self.dir)
+        out = dr.execute(output, inputs=input)
+        wa.cd_back()
 
         exp_group = exp_group or self.select_all()
         wa = WorkAt(self.dir)    
