@@ -8,9 +8,15 @@ readme = "README.md"
 requires-python = ">3.8"
 version = "0.1.0"
 dependencies = [
-    "sf-hamilton",
+    "sf-hamilton[visualization]",
+    "tqdm",
+    "dagworks-sdk",
 ]
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pre-commit"
 ]
+
+[tool.black]
+line-length = 100
