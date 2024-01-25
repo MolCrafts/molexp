@@ -34,6 +34,9 @@ class Monitor:
                 # only "main" monitor can print all tasks' status
                 self.check_all()
             # sleep(interval)
+                
+    def __del__(self):
+        self.task_queue.remove(self)
 
 def slurm(func, name: str, work_dir: Path | str, slurm_args: dict[str], cmd: list[str]):
     """Decorator to run the result of a function as a command line command."""
