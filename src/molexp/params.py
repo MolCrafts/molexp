@@ -38,7 +38,7 @@ class ParamSpace(dict):
         exclude: list of keys to exclude
         """
         from itertools import product
-        keys = sorted([k for k in self.keys() if k not in exclude])
+        keys = [k for k in self.keys() if k not in exclude]
         values = [self[k] for k in keys]
         return Params(
             Param(zip(keys, v))
