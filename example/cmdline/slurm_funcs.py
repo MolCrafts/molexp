@@ -15,37 +15,16 @@ def echo_1(start: str) -> str:
 @tag(property=["cmdline", "slurm"], cache="pickle")
 @slurm(
     "./workdir",  # chdir and save submit script to here,
-    # moniter = False, # block and monitor task
-)
-def relax(echo_1: str) -> dict:
-    # prepare input files
-    time.sleep(2)
-    return dict(
-        slurm_args={
-            "-A": "snic2022-5-658",
-            "-n": "128",
-            "-J": "relax",
-            "-o": "out",
-            "-e": "err",
-            "-t": "07-00:00:00",
-        },
-        cmd=["mpprun lmp -in in.relax"],
-    )
-
-
-@tag(property=["cmdline", "slurm"], cache="pickle")
-@slurm(
-    "./workdir",  # chdir and save submit script to here,
     # candidate API:
     # moniter = True
 )
-def test(relax: dict) -> [dict, dict, dict]:
+def stage1(echo_1: dict) -> [dict, dict, dict]:
     time.sleep(2)
     slurm_dict = dict(
         slurm_args={
             "-A": "snic2022-5-658",
             "-n": "128",
-            "-J": "test",
+            "-J": "stage1",
             "-o": "out",
             "-e": "err",
             "-t": "07-00:00:00",
@@ -60,5 +39,5 @@ def test(relax: dict) -> [dict, dict, dict]:
 
 @tag(property=["cmdline"], cache="pickle")
 @cmdline_decorator
-def echo_3(test: dict, relax: dict) -> str:
-    return f'echo "3: {str(test) + ":::" + str(relax)}"'
+def echo_3(stage1: dict) -> str:
+    return f'echo "3: {str(stage1)}"'

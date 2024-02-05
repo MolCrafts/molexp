@@ -86,6 +86,7 @@ def slurm(work_dir: Path | str, monitor: bool = True):
                 # TODO: blocked, but usually many workflow execute in parallel, so we only need a global monitor to pooling all tasks' status
                 if monitor:
                     print(f"monitoring {slurm_task_id}")
+                    # block and monitoring
                     # _monitor = Monitor(slurm_task_id)
                     # while True:
                     #     # if _monitor.status == "completed":
@@ -99,30 +100,8 @@ def slurm(work_dir: Path | str, monitor: bool = True):
                 except StopIteration as e:
                     result = e.value
             else:
-                # if not a generator, we dont need to monitor it since submit command return no result but job id, only we need to do is capture user manually returned result
-                arguments: dict = func(*args, **kwargs)
-
-                _write_slurm_script(
-                    work_dir, slurm_script_name, arguments["slurm_args"], arguments["cmd"]
-                )
-                # Run the command and capture the output
-                os.chdir(work_dir)
-                # slurm_task_info = subprocess.run(f"sbatch {slurm_script_name}", shell=True, capture_output=True, text=True)
-                slurm_task_info = subprocess.run(
-                    f'echo "sbatch {slurm_script_name} 5678"',
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                )
-                slurm_task_id = int(slurm_task_info.stdout.split()[-1])
-                if monitor:
-                    print(f"monitoring {slurm_task_id}")
-                # NOTE: chdir and change back
-                # so I really want a context manager
-                # with work_at(work_dir):
-                #     do something
-                # then back
-                result = {"slurm_task_id": slurm_task_id}
+                # function must be a generator
+                raise ValueError("Function must be a generator.")
 
             # change back to the original working directory
             os.chdir(prior_work_dir)
