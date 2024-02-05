@@ -5,7 +5,8 @@ from hamilton.experimental import h_cache
 from hamilton.plugins import h_tqdm
 from hamilton import driver
 
-import funcs
+# import funcs
+import slurm_funcs
 from prototype import cmdline
 
 API_KEY = os.environ["DAGWORKS_API_KEY"]
@@ -40,11 +41,11 @@ if __name__ == "__main__":
                 executors.MultiThreadingExecutor(5),
             )
         )
-        .with_modules(funcs)
+        .with_modules(slurm_funcs)
         .with_adapters(*hamilton_adapters)
         .build()
     )
-    dr.display_all_functions("graph.dot")
+    dr.display_all_functions("graph.png")
     print(dr.list_available_variables())
     # for var in dr.list_available_variables():
     #     print(dr.execute([var.name], inputs={"start": "hello"}))
