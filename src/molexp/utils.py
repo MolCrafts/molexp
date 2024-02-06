@@ -25,3 +25,7 @@ def work_at(path):
     workat.cd_to()
     yield
     workat.cd_back()
+
+def cmdrun(cmd: str, *arg, **kwargs):
+    import subprocess
+    subprocess.run(cmd, shell=True, check=True, *arg, **kwargs) 

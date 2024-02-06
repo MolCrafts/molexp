@@ -13,23 +13,23 @@ class Script:
 
     def __init__(self, name):
         self.name = name
-        self._content:str = ""
-    
-    @property
-    def content(self)->str:
-        return self._content
+        self.content:str = ""
 
     def save(self, path: Path | str = Path.cwd()):
         path = Path(path)
+        self.prettify()
+        fpath = path / self.name
+        if not fpath.exists():
+            fpath.parent.mkdir(parents=True, exist_ok=True)
         with open(path / self.name, 'w') as f:  
             f.write(self.content)
 
     def prettify(self)->str:
-        self._content = textwrap.dedent(self._content)
+        self.content = textwrap.dedent(self.content)
 
     def substitute(self, isMissError=False, **kwargs):
-        tmp = string.Template(self._content)
+        tmp = string.Template(self.content)
         if isMissError:
             content = tmp.substitute(kwargs)
         else:  content = tmp.safe_substitute(kwargs)
-        self._content = content
+        self.content = content

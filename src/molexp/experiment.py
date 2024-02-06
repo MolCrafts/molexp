@@ -5,7 +5,6 @@
 
 from pathlib import Path
 import random
-import logging
 from .params import Param
 from typing import Callable
 
