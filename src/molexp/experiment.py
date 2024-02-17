@@ -24,6 +24,7 @@ class Experiment:
         self.name = str(param)
         self.root = Path(root)
         self.dir = self.root / self.name
+        self.cache_dir = self.dir / "cache"
         self.id = hex(random.randint(0, 255))
 
     def init(self):

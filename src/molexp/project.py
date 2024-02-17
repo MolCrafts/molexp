@@ -19,6 +19,7 @@ from hamilton import driver
 from hamilton import telemetry
 from hamilton.base import SimplePythonGraphAdapter
 from hamilton.experimental.h_cache import CachingGraphAdapter
+from hamilton.execution import executors
 telemetry.disable_telemetry()
 
 __all__ = ["Project"]
@@ -30,8 +31,12 @@ class Project:
         self.logger = logging.getLogger(self.name)
         self.root = Path(root or Path.cwd())
         self.dir = self.root / self.name
-        self.tasks = []
-        self.global_tasks = []
+        self.cache_dir = self.dir / "cache"
+        self.tasks = {
+            "pre": [],
+            "main": [],
+            "post": []
+        }
         self.expg = ExperimentGroup()
         if self.exists():
             self.load()
@@ -41,19 +46,27 @@ class Project:
     def init(self):
         self.dir.mkdir(parents=True)
         self.logger.info(f"Project {self.name} is created at {self.dir}")
-        self.meta = {
-            'experiments': []
+        self.index = {
+            "version": "0.0.1",
+            "name": self.name,
+            "experiments": [],
+            "tasks": {
+                "pre": [],
+                "main": [],
+                "post": []
+            },
+            "cache_dir": f"{self.dir} / cache"
         }
-        # TODO: add meta data and config
+        # TODO: add index data and config
 
     def __del__(self):
-        with open(self.dir / "meta.json", "w") as f:
-            json.dump(self.meta, f)
+        with open(self.dir / "index.json", "w") as f:
+            json.dump(self.index, f)
 
     def load(self):
-        with open(self.dir / "meta.json", "r") as f:
-            self.meta = json.load(f)
-        for exp_name in self.meta['experiments']:
+        with open(self.dir / "index.json", "r") as f:
+            self.index = json.load(f)
+        for exp_name in self.index['experiments']:
             exp = Experiment(Param.from_str(exp_name), self.dir)
             exp.load()
             self.expg.append(exp)
@@ -68,10 +81,10 @@ class Project:
             exp = Experiment(param, self.dir)
             exp.init()
             self.expg.append(exp)
-            self.meta['experiments'].append(str(param))
+            self.index['experiments'].append(exp.name)
         return self.expg
             
-    def select(self, params: Params):
+    def select(self, params: Params) -> ExperimentGroup:
 
         expg = ExperimentGroup()
         for param in params:
@@ -80,64 +93,68 @@ class Project:
                 expg.append(exp)
         return expg
     
-    def select_all(self):
-        expg = ExperimentGroup()
-        self.meta.seek(0)
-        for line in self.meta.readlines():
-            exp = Experiment(str(Param.from_str(line)).rstrip('\n'), self.dir)
-            exp.load()
-            expg.append(exp)
-        return expg
+    def add_pre_task(self, module_name):
+
+        self.tasks["pre"].append(module_name)
+        self.index["tasks"]["pre"] = [module.__name__ for module in self.tasks["pre"]]
         
+        for module in self.tasks["p"]:
+            shutil.copy(module.__file__, self.dir)
+
+    def add_task(self, module_name):
         
-    def add_tasks(self, *modules):
-        for module in modules:
-            self.tasks.append(module)
-            if not Path(self.dir / module.__file__).exists():
-                shutil.copy(module.__file__, self.dir)
+        self.tasks["main"].append(module_name)
+        self.index["tasks"]["main"] = [module.__name__ for module in self.tasks]
+        
+        for module in self.tasks["main"]:
+            shutil.copy(module.__file__, self.dir)
 
-    def add_task(self, module_name, *funcs):
-        with open(self.dir / f"{module_name}.py", "w") as f:
-            for func in funcs:
-                f.write(textwrap.dedent(inspect.getsource(func)))
-        module = importlib.import_module(f"{self.name}.{module_name}")
-        self.tasks.append(module)
-        return module
-    
-    def add_global_tasks(self, *modules):
-        for module in modules:
-            self.global_tasks.append(module)
-            if not Path(self.dir / module.__file__).exists():
-                shutil.copy(module.__file__, self.dir)
+    def add_post_task(self, module_name):
+
+        self.tasks["post"].append(module_name)
+        self.index["tasks"]["post"] = [module.__name__ for module in self.tasks["post"]]
+        
+        for module in self.tasks["post"]:
+            shutil.copy(module.__file__, self.dir)
 
 
-    def execute(self, output:list, exp_group: ExperimentGroup | None = None, config={}):
+    def execute(self, output:list, config={}):
 
-        wa = WorkAt(self.dir)
+        proj_dir = WorkAt(self.dir)
+        proj_dir.cd_to(self.dir)
         dr = (
             driver.Builder()
-            .with_modules(*self.tasks)
+            .with_modules(*self.tasks["pre"])
             .with_config(config)
-            .with_adapter(CachingGraphAdapter(self.dir))
+            .with_adapters(CachingGraphAdapter(self.cache_dir))
+            # .with_local_executor()
+            # .with_remote_executor()
             .build()
         )
-        input = dict()
-        wa.cd_to(self.dir)
-        out = dr.execute(output, inputs=input)
-        wa.cd_back()
+        dr.execute(output, inputs=input)
 
         exp_group = exp_group or self.select_all()
-        wa = WorkAt(self.dir)    
+   
         for exp in exp_group:
             dr = (
                 driver.Builder()
-                .with_modules(*self.tasks)
+                .with_modules(*self.tasks["main"])
                 .with_config(config)
-                .with_adapter(CachingGraphAdapter(str(exp.dir)))
+                .with_adapter(CachingGraphAdapter(str(exp.cache_dir)))
                 .build()
             )
             info = {'param': exp.param, 'exp_dir': exp.dir}
-            wa.cd_to(exp.dir)
-            out = dr.execute(output, inputs={'info': info})
-            wa.cd_back()
-        return out
+            proj_dir.cd_to(exp.dir)
+            dr.execute(output, inputs={'info': info})
+            proj_dir.cd_back()
+
+        dr = (
+            driver.Builder()
+            .with_modules(*self.tasks["post"])
+            .with_config(config)
+            .with_adapters(CachingGraphAdapter(self.cache_dir))
+            # .with_local_executor()
+            # .with_remote_executor()
+            .build()            
+        )
+        dr.execute(output, inputs=input)
