@@ -57,6 +57,9 @@ def slurm(work_dir: Path | str, monitor: bool = True):
         work_dir = Path(work_dir)
 
     def decorator(func):
+        if not inspect.isgeneratorfunction(func):
+            raise ValueError("Function must be a generator.")
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # we don't want to change the current working directory
@@ -64,53 +67,52 @@ def slurm(work_dir: Path | str, monitor: bool = True):
             prior_work_dir = Path.cwd()
             name = func.__name__
             slurm_script_name = f"{name}.sub"
-            if inspect.isgeneratorfunction(func):
-                # If the function is a generator, we need to block and monitor the task
-                gen = func(*args, **kwargs)
-                arguments: dict = next(gen)
-                # Run the command and capture the output
-                _write_slurm_script(
-                    work_dir, slurm_script_name, arguments["slurm_args"], arguments["cmd"]
-                )
-                os.chdir(work_dir)  # to run script
-                # slurm_task_info = subprocess.run(f"sbatch {slurm_script_name}", shell=True, capture_output=True, text=True)
-                slurm_task_info = subprocess.run(
-                    f'echo "sbatch {slurm_script_name} 1234"',
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                )
-                # slurm_task_info := Submitted batch job 30588834
-                slurm_task_id = int(slurm_task_info.stdout.split()[-1])
 
-                # TODO: blocked, but usually many workflow execute in parallel, so we only need a global monitor to pooling all tasks' status
-                if monitor:
-                    print(f"monitoring {slurm_task_id}")
-                    # block and monitoring
-                    # _monitor = Monitor(slurm_task_id)
-                    # while True:
-                    #     # if _monitor.status == "completed":
-                    #     #     break
-                    #     print("monitoring")
-                    #     break
-                try:
-                    process_result = {"slurm_task_id": slurm_task_id}
-                    gen.send(process_result)
-                    raise ValueError("Generator cannot have multiple yields.")
-                except StopIteration as e:
-                    result = e.value
-            else:
-                # function must be a generator
-                raise ValueError("Function must be a generator.")
+            # If the function is a generator, we need to block and monitor the task if required
+            generator = func(*args, **kwargs)
+            arguments: dict = next(generator)
+            # Run the command and capture the output
+            _write_slurm_script(
+                work_dir, slurm_script_name, arguments["slurm_args"], arguments["cmd"]
+            )
+            os.chdir(work_dir)  # to run script
+            # slurm_task_info = subprocess.run(f"sbatch {slurm_script_name}", shell=True, capture_output=True, text=True)
+            slurm_task_info = subprocess.run(
+                f'echo "sbatch {slurm_script_name} 1234"',
+                shell=True,
+                capture_output=True,
+                text=True,
+            )
+            # slurm_task_info := Submitted batch job 30588834
+            slurm_task_id = int(slurm_task_info.stdout.split()[-1])
+
+            # TODO: blocked, but usually many workflow execute in parallel,
+            #  so we only need a global monitor to poll all tasks' statuses
+            if monitor:
+                print(f"monitoring {slurm_task_id}")
+                # block and monitoring
+                # _monitor = Monitor(slurm_task_id)
+                # while True:
+                #     # if _monitor.status == "completed":
+                #     #     break
+                #     print("monitoring")
+                #     break
+            try:
+                process_result = {"slurm_task_id": slurm_task_id}
+                generator.send(process_result)
+                # ValueError should not be hit because a StopIteration should be raised, unless
+                # there are multiple yields in the generator.
+                raise ValueError("Generator cannot have multiple yields.")
+            except StopIteration as e:
+                result = e.value
 
             # change back to the original working directory
             os.chdir(prior_work_dir)
             # Return the output
             return result
 
-        if inspect.isgeneratorfunction(func):
-            # get the return type and set it as the return type of the wrapper
-            wrapper.__annotations__["return"] = inspect.signature(func).return_annotation[2]
+        # get the return type and set it as the return type of the wrapper
+        wrapper.__annotations__["return"] = inspect.signature(func).return_annotation[2]
         return wrapper
 
     return decorator

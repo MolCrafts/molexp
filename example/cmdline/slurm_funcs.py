@@ -5,20 +5,20 @@ from prototype.cmdline import cmdline_decorator
 from prototype.slurm import slurm
 
 
-@tag(property=["cmdline"], cache="pickle")
+@tag(cache="pickle")
 @cmdline_decorator
 def echo_1(start: str) -> str:
     time.sleep(2)
     return f'echo "1: {start}"'
 
 
-@tag(property=["cmdline", "slurm"], cache="pickle")
+@tag(cache="pickle")
 @slurm(
     "./workdir",  # chdir and save submit script to here,
     # candidate API:
     # moniter = True
 )
-def stage1(echo_1: dict) -> [dict, dict, dict]:
+def stage1(echo_1: str) -> [dict, dict, dict]:
     time.sleep(2)
     slurm_dict = dict(
         slurm_args={
@@ -37,7 +37,7 @@ def stage1(echo_1: dict) -> [dict, dict, dict]:
     return {"result": 42, "process_result": process_result}
 
 
-@tag(property=["cmdline"], cache="pickle")
+@tag(cache="pickle")
 @cmdline_decorator
 def echo_3(stage1: dict) -> str:
     return f'echo "3: {str(stage1)}"'

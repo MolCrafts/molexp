@@ -10,7 +10,7 @@ import slurm_funcs
 from prototype import cmdline
 
 API_KEY = os.environ["DAGWORKS_API_KEY"]
-PROJECT_ID = os.environ["DAGWORKS_PROJECT_ID"]
+PROJECT_ID = 19341  # os.environ["DAGWORKS_PROJECT_ID"]
 USER_NAME = os.environ["DAGWORKS_USER_NAME"]
 
 
