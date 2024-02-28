@@ -15,6 +15,17 @@ class Script:
         self.name = name
         self.content:str = ""
 
+    def append(self, content: str):
+        self.content += content
+
+    @classmethod
+    def open(self, name):
+        with open(name, 'r') as f:
+            content = f.read()
+        script = Script(name)
+        script.content = content
+        return script
+
     def save(self, path: Path | str = Path.cwd()):
         path = Path(path)
         self.prettify()

@@ -32,20 +32,12 @@ class Project:
         self.root = Path(root or Path.cwd())
         self.dir = self.root / self.name
         self.cache_dir = self.dir / "cache"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.tasks = {
             "pre": [],
             "main": [],
             "post": []
         }
-        self.expg = ExperimentGroup()
-        if self.exists():
-            self.load()
-        else:
-            self.init()
-
-    def init(self):
-        self.dir.mkdir(parents=True)
-        self.logger.info(f"Project {self.name} is created at {self.dir}")
         self.index = {
             "version": "0.0.1",
             "name": self.name,
@@ -55,22 +47,29 @@ class Project:
                 "main": [],
                 "post": []
             },
-            "cache_dir": f"{self.dir} / cache"
+            "cache_dir": f"{self.cache_dir}"
         }
+        
         # TODO: add index data and config
+        self.expg = ExperimentGroup()
+        self.init()
 
-    def __del__(self):
-        with open(self.dir / "index.json", "w") as f:
-            json.dump(self.index, f)
+    def init(self):
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.logger.info(f"Project {self.name} is created at {self.dir}")
+        
+    # def save(self):
+    #     with open(self.dir / "index.json", "w") as f:
+    #         json.dump(self.index, f)
 
-    def load(self):
-        with open(self.dir / "index.json", "r") as f:
-            self.index = json.load(f)
-        for exp_name in self.index['experiments']:
-            exp = Experiment(Param.from_str(exp_name), self.dir)
-            exp.load()
-            self.expg.append(exp)
-        self.logger.info(f"Project {self.name} is loaded from {self.dir}")
+    # def load(self):
+    #     with open(self.dir / "index.json", "r") as f:
+    #         self.index = json.load(f)
+    #     for exp_name in self.index['experiments']:
+    #         exp = Experiment(Param.from_str(exp_name), self.dir)
+    #         exp.load()
+    #         self.expg.append(exp)
+    #     self.logger.info(f"Project {self.name} is loaded from {self.dir}")
 
     def exists(self):
         return self.dir.exists()
@@ -98,13 +97,13 @@ class Project:
         self.tasks["pre"].append(module_name)
         self.index["tasks"]["pre"] = [module.__name__ for module in self.tasks["pre"]]
         
-        for module in self.tasks["p"]:
+        for module in self.tasks["pre"]:
             shutil.copy(module.__file__, self.dir)
 
     def add_task(self, module_name):
         
         self.tasks["main"].append(module_name)
-        self.index["tasks"]["main"] = [module.__name__ for module in self.tasks]
+        self.index["tasks"]["main"] = [module.__name__ for module in self.tasks["main"]]
         
         for module in self.tasks["main"]:
             shutil.copy(module.__file__, self.dir)
@@ -117,44 +116,47 @@ class Project:
         for module in self.tasks["post"]:
             shutil.copy(module.__file__, self.dir)
 
+    def execute_pre_task(self, input:dict, output:list):
 
-    def execute(self, output:list, config={}):
-
-        proj_dir = WorkAt(self.dir)
-        proj_dir.cd_to(self.dir)
         dr = (
             driver.Builder()
             .with_modules(*self.tasks["pre"])
-            .with_config(config)
+            .with_config({})
             .with_adapters(CachingGraphAdapter(self.cache_dir))
             # .with_local_executor()
             # .with_remote_executor()
             .build()
         )
-        dr.execute(output, inputs=input)
+        dr.execute(output, inputs={'config': input})
 
-        exp_group = exp_group or self.select_all()
-   
+    def execute(self, input:dict, output:list):
+
+        proj_dir = WorkAt(self.dir)
+
+        exp_group = self.select_all()
         for exp in exp_group:
             dr = (
                 driver.Builder()
                 .with_modules(*self.tasks["main"])
-                .with_config(config)
+                .with_config({})
                 .with_adapter(CachingGraphAdapter(str(exp.cache_dir)))
                 .build()
             )
-            info = {'param': exp.param, 'exp_dir': exp.dir}
+            info = {'param': exp.param, 'input': input}
             proj_dir.cd_to(exp.dir)
-            dr.execute(output, inputs={'info': info})
+            dr.execute(output, inputs={'input': info})
             proj_dir.cd_back()
 
-        dr = (
-            driver.Builder()
-            .with_modules(*self.tasks["post"])
-            .with_config(config)
-            .with_adapters(CachingGraphAdapter(self.cache_dir))
-            # .with_local_executor()
-            # .with_remote_executor()
-            .build()            
-        )
-        dr.execute(output, inputs=input)
+        # dr = (
+        #     driver.Builder()
+        #     .with_modules(*self.tasks["post"])
+        #     .with_config({})
+        #     .with_adapters(CachingGraphAdapter(self.cache_dir))
+        #     # .with_local_executor()
+        #     # .with_remote_executor()
+        #     .build()            
+        # )
+        # dr.execute(output, inputs=input)
+
+    def select_all(self):
+        return self.expg

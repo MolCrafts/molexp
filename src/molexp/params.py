@@ -11,7 +11,7 @@ class Param(dict):
         return '-'.join([f"{k}_{v}" for k, v in self.items()])
     
     def __repr__(self):
-        return f"Param({super().__str__()})"
+        return f"Param({self.__str__()})"
     
     @classmethod
     def from_str(cls, s: str):
@@ -21,17 +21,11 @@ class Params(list):
     
     def __str__(self):
         return f"Params({super().__str__()})"
-    
-    def __repr__(self):
-        return self.__str__()
 
 class ParamSpace(dict):
 
     def __str__(self):
         return f"ParamSpace({super().__str__()})"
-    
-    def __repr__(self):
-        return self.__str__()
 
     def product(self, exclude: Sequence[str] = []):
         """
