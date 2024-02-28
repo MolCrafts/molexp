@@ -5,9 +5,6 @@ from pathlib import Path
 from .script import Script
 
 class Engine:
-    pass
-
-class Engine:
     ...
 
 class LAMMPSEngine(Engine):

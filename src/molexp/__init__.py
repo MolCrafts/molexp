@@ -4,4 +4,4 @@ from .submitor import *
 from .project import Project
 from .params import ParamSpace, Params, Param
 from .utils import cmdrun
-from .engine import LAMMPSEngine
+from . import engine

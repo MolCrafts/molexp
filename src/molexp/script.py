@@ -11,36 +11,63 @@ __all__ = ['Script']
 
 class Script:
 
-    def __init__(self, name):
+    def __init__(self, name:str):
         self.name = name
-        self.content:str = ""
+        self._raw:list[str] = []
 
-    def append(self, content: str):
-        self.content += content
+    @property
+    def text(self)->str:
+        return '\n'.join(self._raw)
+    
+    @text.setter
+    def text(self, text:str):
+        self._raw = text.split('\n')
+
+    @property
+    def content(self)->list[str]:
+        return self._raw
+    
+    @content.setter
+    def content(self, text:str):
+        self._raw = text.split('\n')
+
+    def append(self, text: str):
+        self._raw.extend(text.split('\n'))
+
+    def insert(self, index: int, text: str):
+        self._raw[index:index] = text.split('\n')
+
+    def delete(self, index: int | slice):
+        if isinstance(index, int):
+            del self._raw[index]
+        else:
+            del self._raw[slice(*index)]
 
     @classmethod
     def open(self, name):
         with open(name, 'r') as f:
-            content = f.read()
+            text = f.readlines()
         script = Script(name)
-        script.content = content
+        script.text = text
         return script
 
-    def save(self, path: Path | str = Path.cwd()):
+    def save(self, path: Path | str=Path.cwd()):
         path = Path(path)
-        self.prettify()
+        text = self.prettify()
         fpath = path / self.name
         if not fpath.exists():
             fpath.parent.mkdir(parents=True, exist_ok=True)
-        with open(path / self.name, 'w') as f:  
-            f.write(self.content)
+        with open(fpath, 'w') as f:  
+            f.write(text)
 
     def prettify(self)->str:
-        self.content = textwrap.dedent(self.content)
+        text = textwrap.dedent(self.text)
+        text = text.strip()
+        return text
 
     def substitute(self, isMissError=False, **kwargs):
-        tmp = string.Template(self.content)
+        tmp = string.Template(self.text)
         if isMissError:
-            content = tmp.substitute(kwargs)
-        else:  content = tmp.safe_substitute(kwargs)
-        self.content = content
+            text = tmp.substitute(kwargs)
+        else:  text = tmp.safe_substitute(kwargs)
+        self._raw = text.split('\n')
