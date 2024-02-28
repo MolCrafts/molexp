@@ -1,6 +1,8 @@
 from contextlib import contextmanager
+from functools import partial
 import os
 from pathlib import Path
+from hamilton.function_modifiers import tag
 
 class WorkAt:
 
@@ -29,3 +31,5 @@ def work_at(path):
 def cmdrun(cmd: str, *arg, **kwargs):
     import subprocess
     subprocess.run(cmd, shell=True, check=True, *arg, **kwargs) 
+
+cache = partial(tag, cache='pickle')
