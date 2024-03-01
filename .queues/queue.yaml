@@ -1,0 +1,9 @@
+queue_type: SLURM
+queue_primary: slurm
+queues:
+  slurm: {
+     cores_max: 128,
+     cores_min: 32,
+     run_time_max: 1024, 
+     script: slurm.sh
+  }

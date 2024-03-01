@@ -6,14 +6,15 @@ from hamilton.function_modifiers import tag
 
 class WorkAt:
 
-    def __init__(self, root: str | Path):
-        self.root = Path(root)
+    def __init__(self, dir: str | Path):
+        self.dir = Path(dir)
+        os.chdir(self.dir)
 
     def cd_to(self, path: str | Path):
         os.chdir(path)
 
     def cd_back(self):
-        os.chdir(self.root)
+        os.chdir(self.dir)
 
     def __enter__(self):
         self.cd_to()

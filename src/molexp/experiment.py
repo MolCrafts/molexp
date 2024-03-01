@@ -5,6 +5,8 @@
 
 from pathlib import Path
 import random
+
+from molexp.utils import WorkAt
 from .params import Param
 from typing import Callable
 
@@ -19,20 +21,10 @@ class ExperimentGroup(list):
 
 class Experiment:
 
-    def __init__(self, param: Param, root: None | Path | str):
+    def __init__(self, param: Param, root: Path = Path.cwd()):
         self.param = param
         self.name = str(param)
-        self.root = Path(root)
+        self.root = root
         self.dir = self.root / self.name
-        self.cache_dir = self.dir / "cache"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.id = hex(random.randint(0, 255))
 
-    def init(self):
         self.dir.mkdir(parents=True, exist_ok=True)
-
-    def exists(self):
-        return self.dir.exists()
-    
-    def load(self):
-        pass

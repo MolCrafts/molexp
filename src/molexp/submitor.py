@@ -1,103 +1,112 @@
-# author: Roy Kid
-# contact: lijichen365@126.com
-# date: 2023-12-01
-# version: 0.0.1
-
-from .script import Script
-from pathlib import Path
+import inspect
+import functools
 import subprocess
-import logging
-from functools import wraps
+import os
 
+from pathlib import Path
 
-__all__ = ['SlurmSubmitor', 'submit', 'work_at']
+from pysqa import QueueAdapter
+
+print(Path('.queues').absolute())
+qa = QueueAdapter(directory=".queues")
 
 class Monitor:
+    task_queue = []
 
-    def __init__(self):
+    def __init__(self, task_id: int, user: str = None):
+        self.task_id = task_id
+        self.task_queue.append(self)
+        self.user = user
 
-        self.job_pool = {}
-        self.logger = logging.getLogger(self.__class__.__name__)
+    def check_status(self):
+        check_cmd = f"squeue {self.task_id}"
+        if self.user:  # filter result by using user
+            check_cmd = f"squeue -u {self.user}"
+        subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
+        # TODO: parse the output and return status
+        # return status
 
-    def add_job(self, job_id, job_name):
-        self.job_pool[job_id] = job_name
+    @classmethod
+    def check_all(cls):
+        for task in cls.task_queue:
+            task.check_status()
+        # print/log
 
-    def remove_job(self, job_id):
-        self.job_pool.pop(job_id)
+    def wait(self):
+        while True:
+            if self.check_status() == "completed":
+                break
+            if self == self.task_queue[0]:
+                # only "main" monitor can print all tasks' status
+                self.check_all()
+            # sleep(interval)
 
-    def status(self, job_id):
-        out = subprocess.check_output(f'squeue -j {job_id}', shell=True)
-        out = out.decode('utf-8')
-        lines = out.split('\n')
-        line = list(map(lambda x: x.startswirh(str(job_id)), lines))
-        assert len(line) > 0, 'multiple jobs found, please check!'
-        # 29417953 tetralith tg_mil1_  x_jicli  R      23:51      2 n[1790,1795]
-        job_id, partition, name, user, status, time, nodes, node_info = line[0].split(' ')
-        self.logger.info(f'Job {job_id} status: {status}')
-        return status
-        
+    def __del__(self):
+        self.task_queue.remove(self)
 
-class SlurmSubmitor(Script):
 
-    monitor = Monitor()
+def submit():
+    """Decorator to run the result of a function as a command line command."""
 
-    def __init__(self, config:dict, name:str='submit', ext:str='sh', is_block:bool=False):
-        super().__init__(name, ext)
-        self._config = config
-        self.logger = logging.getLogger(self.__class__.__name__)
 
-    def submit(self, path: Path | str = Path.cwd()):
-        # write down
-        config_lines = []
-        config_lines.append('#!/bin/bash')
-        for k, v in self._config.items():
-            config_lines.append(f'#SBATCH {k} {v}')
-        config_lines.append('\n')
+    def decorator(func):
+        if not inspect.isgeneratorfunction(func):
+            raise ValueError("Function must be a generator.")
 
-        self._content_list = config_lines + self._content_list
-
-        path = Path(path)
-        self.save(path)
-
-        proc = subprocess.call(f'sbatch {self.full_name}', shell=True, cwd=path, capture_output=True)
-        stdout = proc.stdout.decode('utf-8')
-        stderr = proc.stderr.decode('utf-8')
-        if stderr:
-            self.logger.error(f'Submit {self.full_name} to {path} failed!')
-            self.logger.error(stderr)
-        else:
-            # example: Submitted batch job 123456
-            job_id = stdout.split(' ')[-1]
-            self.logger.info(f'{self.full_name}({job_id}) submitted')
-        
-        if self.is_block:
-            self.monitor.add_job(job_id, self.full_name)
-            while self.monitor(job_id) == 'R':
-                time.sleep(60)
-
-def work_at(workdir:Path|str=Path.cwd()):
-    def _cd(func):
-        @wraps(func)
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            olddir = os.cwd()
-            os.chdir(workdir)
-            results = func(*args, **kwargs)
-            os.chdir(olddir)
-            return results
-        return wrapper
-    return _cd
+            # we don't want to change the current working directory
+            # until we are executing the function
+            name = func.__name__
+            slurm_script_name = f"{name}.sub"
 
-def submit(cmd:str, type:str, is_block:bool, config:dict, name:str='submit', ext:str='sh'):
-    def _submit(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            result = func(*args, **kwargs)
-            if type == 'slurm':
-                submitor = SlurmSubmitor(config, name, ext, is_block)
-                submitor.append(cmd)
-                submitor.submit(os.cwd())
-            else:
-                raise NotImplementedError(f'submit type {type} not implemented!')
+            # If the function is a generator, we need to block and monitor the task if required
+            generator = func(*args, **kwargs)
+            arguments: dict = next(generator)
+            monitor = arguments.pop("monitor", False)
+            # Run the command and capture the output
+            print(arguments)
+            job_id = qa.submit_job(
+                queue=arguments["queue"],
+                job_name=arguments["job_name"],
+                working_directory=arguments["working_directory"],
+                cores=arguments["cores"],
+                memory_max=arguments["memory_max"],
+                run_time_max=arguments["run_time_max"],
+                dependency_list=arguments["dependency_list"],
+                command=arguments["command"]
+            )
+
+            # slurm_task_info := Submitted batch job 30588834
+
+            # TODO: blocked, but usually many workflow execute in parallel,
+            #  so we only need a global monitor to poll all tasks' statuses
+            if monitor:
+                print(f"monitoring {job_id}")
+                # block and monitoring
+                # _monitor = Monitor(slurm_task_id)
+                # while True:
+                #     # if _monitor.status == "completed":
+                #     #     break
+                #     print("monitoring")
+                #     break
+            try:
+                process_result = {"job_id": job_id}
+                generator.send(process_result)
+                # ValueError should not be hit because a StopIteration should be raised, unless
+                # there are multiple yields in the generator.
+                raise ValueError("Generator cannot have multiple yields.")
+            except StopIteration as e:
+                result = e.value
+
+            # change back to the original working directory
+            # Return the output
             return result
+
+        # get the return type and set it as the return type of the wrapper
+        print(wrapper.__annotations__)
+        print(inspect.signature(func).return_annotation)
+        wrapper.__annotations__["return"] = inspect.signature(func).return_annotation  # Jichen: why [2] ?
         return wrapper
-    return _submit
+
+    return decorator
