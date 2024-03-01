@@ -20,7 +20,7 @@ def main(pre_process: me.Experiment)->me.Experiment:
     print(f"before submit")
     yield dict(
         queue="slurm",
-        job_name="test_slurm",
+        job_name=pre_process.name,
         working_directory=str(pre_process.dir),
         cores=16,
         memory_max="8G",
