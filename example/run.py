@@ -24,7 +24,7 @@ inputs = dict({
     # 'work_dir': ''
     'repeat_unit': ['N', 'M'],
     'repeat': 1,
-    'n_chains': 20,
+    'n_chains': 2,
     'density': 0.01,
 })
 
@@ -36,19 +36,12 @@ materializers = [
     )
 ]
 
-
-
-# dr.materialize(*materializers, inputs=inputs)
-for repeat_unit in [['N', 'M']]:
-    for repeat in [1, 4, 8]:
-        inputs['repeat'] = repeat
-        inputs['repeat_unit'] = repeat_unit
-        inputs['work_dir'] = f"{''.join(repeat_unit)}x{repeat}"
-        Path(inputs['work_dir']).mkdir(exist_ok=True)
-        dr.visualize_materialization(
-            *materializers,
-            inputs=inputs,
-            output_file_path=f"{tracker_hook.run_directory}/dag",
-            render_kwargs=dict(view=False, format="png"),
-        )
-        dr.materialize(*materializers, inputs=inputs)
+inputs['work_dir'] = f"{''.join(inputs['repeat_unit'])}x{inputs['repeat']}"
+Path(inputs['work_dir']).mkdir(exist_ok=True)
+dr.visualize_materialization(
+    *materializers,
+    inputs=inputs,
+    output_file_path=f"{tracker_hook.run_directory}/dag",
+    render_kwargs=dict(view=False, format="png"),
+)
+dr.materialize(*materializers, inputs=inputs)

@@ -2,8 +2,8 @@ import molexp as me
 
 from hamilton.function_modifiers import tag
 
-@tag(cache='pickle')
-def gen_eq_script(pack:dict)->dict:
+# @tag(cache='pickle')
+def gen_eq_script(work_dir:str, copy_ff:dict)->dict:
     script = me.Script('eq.in')
     script.text = f"""
     # exp: eq
@@ -61,16 +61,16 @@ def gen_eq_script(pack:dict)->dict:
 
     """
     script.substitute(rdm=312)
-    script.save('lmp_run')
-    return pack
+    script.save(work_dir)
+    return copy_ff
 
 @me.submit()
-def submit_eq(repeat_unit:list[str], repeat:int, gen_eq_script:dict)->dict:
+def submit_eq(work_dir:str, repeat_unit:list[str], repeat:int, gen_eq_script:dict)->dict:
     job_name = f"{''.join(repeat_unit)}x{repeat}"
     tmp = dict(
         queue="slurm",
         job_name=job_name,
-        working_directory="lmp_run",
+        working_directory=work_dir,
         ncores=32,
         # memory_max="8G",
         run_time_max= 1e5,

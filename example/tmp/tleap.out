@@ -33,8 +33,15 @@ Loading parameters: ./T.frcmod
 Reading force field modification type file (frcmod)
 Reading title:
 Remark line goes here
-Writing pdb file: H_N_M_T.pdb
+Writing pdb file: NMN.pdb
 Checking Unit.
+
+/home/x_jicli/miniconda3/envs/wflow/bin/teLeap: Warning!
+The unperturbed charge of the unit (7.999903) is not zero.
+
+/home/x_jicli/miniconda3/envs/wflow/bin/teLeap: Note.
+Ignoring the warning from Unit Checking.
+
 Building topology.
 Building atom parameters.
 Building bond parameters.
@@ -51,8 +58,30 @@ old PREP-specified impropers:
  <H 1>:  C5   S1   C6   S   
  <N 2>:  C2   O    C3   O1  
  <M 3>:  C    O4   C5   O2  
- total 9 improper torsions applied
- 9 improper torsions in old prep form
+ <N 4>:  C2   O    C3   O1  
+ <N 5>:  C2   O    C3   O1  
+ <M 6>:  C    O4   C5   O2  
+ <N 7>:  C2   O    C3   O1  
+ <N 8>:  C2   O    C3   O1  
+ <M 9>:  C    O4   C5   O2  
+ <N 10>:  C2   O    C3   O1  
+ <N 11>:  C2   O    C3   O1  
+ <M 12>:  C    O4   C5   O2  
+ <N 13>:  C2   O    C3   O1  
+ <N 14>:  C2   O    C3   O1  
+ <M 15>:  C    O4   C5   O2  
+ <N 16>:  C2   O    C3   O1  
+ <N 17>:  C2   O    C3   O1  
+ <M 18>:  C    O4   C5   O2  
+ <N 19>:  C2   O    C3   O1  
+ <N 20>:  C2   O    C3   O1  
+ <M 21>:  C    O4   C5   O2  
+ <N 22>:  C2   O    C3   O1  
+ <N 23>:  C2   O    C3   O1  
+ <M 24>:  C    O4   C5   O2  
+ <N 25>:  C2   O    C3   O1  
+ total 31 improper torsions applied
+ 31 improper torsions in old prep form
 Building H-Bond parameters.
 Incorporating Non-Bonded adjustments.
 Not Marking per-residue atom chain types.
@@ -60,4 +89,4 @@ Marking per-residue atom chain types.
  (no restraints)
 	Quit
 
-Exiting LEaP: Errors = 0; Warnings = 0; Notes = 0.
+Exiting LEaP: Errors = 0; Warnings = 1; Notes = 1.

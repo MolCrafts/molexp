@@ -106,7 +106,7 @@ def define_connect(parameterize: dict) -> dict:
     return parameterize
 
 
-@tag(cache="pickle")
+# @tag(cache="pickle")
 def prepare(define_connect: dict) -> dict:
     print('prep')
     cmd = f"prepgen -i H.ac -o H.prepi -f prepi -m H -rn H -rf H.res"
@@ -123,7 +123,7 @@ def prepare(define_connect: dict) -> dict:
     subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
     return define_connect
 
-@tag(cache="pickle")
+# @tag(cache="pickle")
 def parmchk(prepare: dict) -> dict:
 
     parm = lambda name: subprocess.run(
@@ -137,13 +137,14 @@ def parmchk(prepare: dict) -> dict:
     return prepare
 
 
-@tag(cache="pickle")
+# @tag(cache="pickle")
 def connect(work_dir:str, repeat_unit: list[str], repeat: int, parmchk: dict) -> dict:
 
-    seq = "H " + " ".join(repeat_unit) * int(repeat) + " T"
+    seq = "H " + " ".join([" ".join(repeat_unit)]*repeat) + " T"
+    print(f"{seq=}")
     input_file = f"tleap.in"
     output_file = f"tleap.out"
-    filename = seq.replace(" ", "_")
+    filename = f"{''.join(repeat_unit)}"
     amb_prmtop = f"{filename}.prmtop"
     amb_inpcrd = f"{filename}.inpcrd"
     tleap = open(f"tmp/{input_file}", "w")
@@ -183,8 +184,8 @@ def connect(work_dir:str, repeat_unit: list[str], repeat: int, parmchk: dict) ->
     return parmchk
 
 
-@tag(cache="pickle")
-def pack(work_dir:str, n_chains: int, density: float, connect: dict) -> dict:
+# @tag(cache="pickle")
+def pack(n_chains: int, density: float, connect: dict) -> dict:
 
     filename = connect["filename"]
 
@@ -192,8 +193,10 @@ def pack(work_dir:str, n_chains: int, density: float, connect: dict) -> dict:
         pdb = f.readlines()
         natoms = len(pdb) - 3
 
-    box_length = (natoms / density) ** (1 / 3)
+    box_length = (natoms*n_chains / density) ** (1 / 3)
     connect["box_length"] = box_length
+    print(f"{natoms=}")
+    print(f"{box_length=}")
     script = f"""tolerance 2.0
     output {filename}_n{n_chains}.pdb
     filetype pdb
@@ -203,13 +206,13 @@ def pack(work_dir:str, n_chains: int, density: float, connect: dict) -> dict:
     inside cube 0. 0. 0. {box_length}
     end structure
     """
-    with open("tmp/input", "w") as f:
+    with open(f"{tmp_path}/input", "w") as f:
         f.write(script)
-    subprocess.run(f"packmol < input", shell=True, cwd="tmp")
+    subprocess.run(f"packmol < input", shell=True, cwd=tmp_path)
     return connect
 
 
-@tag(cache="pickle")
+# @tag(cache="pickle")
 def to_lammps(work_dir:str, n_chains: int, pack: dict) -> dict:
 
     filename = pack["filename"]
@@ -348,15 +351,16 @@ def to_lammps(work_dir:str, n_chains: int, pack: dict) -> dict:
                 else:
                     break
 
-    with open(f"{work_dir}/{filename}_{n_chains}.data", "w") as f:
+    with open(f"{work_dir}/init.data", "w") as f:
+        print(f"asdfasdfas: {work_dir}/init.data")
         f.writelines(new_lmp)
-
+    print('ghadsa')
     return pack
 
-@tag(cache="pickle")
-def copy_ff(work_dir:str, pack: dict) -> dict:
+# @tag(cache="pickle")
+def copy_ff(work_dir:str, to_lammps: dict) -> dict:
 
-    filename = pack["filename"]
+    filename = to_lammps["filename"]
 
     from_lmp = []
     from_input = []
@@ -366,7 +370,7 @@ def copy_ff(work_dir:str, pack: dict) -> dict:
     nangletypes = 0
     ndihedraltypes = 0
 
-    with open(f'{work_dir/filename}_converted.lmp', 'r') as f:
+    with open(f'{work_dir}/{filename}_converted.lmp', 'r') as f:
         for line in f:
 
             if 'atom types' in line:
@@ -418,7 +422,7 @@ def copy_ff(work_dir:str, pack: dict) -> dict:
     assert nangletypes
     assert ndihedraltypes
 
-    with open (f'{work_dir/filename}_converted.input', 'r') as f:
+    with open (f'{work_dir}/{filename}_converted.input', 'r') as f:
         for line in f:
             if line.startswith('bond_style'):
                 from_input.append(line)
@@ -443,4 +447,4 @@ def copy_ff(work_dir:str, pack: dict) -> dict:
     with open(f'{work_dir}/system.ff', 'w') as f:
         f.writelines(system_ff)
 
-    return pack
+    return to_lammps

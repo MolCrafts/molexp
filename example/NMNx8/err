@@ -1,0 +1,4 @@
+mpprun INFO: mpprun v1.8.2 started
+mpprun INFO: mpprun srun handler invoked on: /home/x_jicli/.local/bin/lmp
+mpprun INFO: none of the known threading env variables set, all set by mpprun: OPENBLAS_NUM_THREADS=1, MKL_NUM_THREADS=1, NUMEXPR_NUM_THREADS=1, OMP_NUM_THREADS=1
+mpprun INFO: mpprun v1.8.2 executing: /usr/bin/srun --mpi pmix -m block:block /home/x_jicli/.local/bin/lmp -in eq.in
