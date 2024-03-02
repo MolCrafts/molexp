@@ -1,0 +1,19 @@
+
+    source leaprc.gaff
+    loadamberprep H.prepi
+    loadamberprep N.prepi
+    loadamberprep M.prepi
+    loadamberprep T.prepi
+    loadamberparams H.frcmod
+    loadamberparams N.frcmod
+    loadamberparams M.frcmod
+    loadamberparams T.frcmod
+
+    system = sequence { H N M T }
+
+    
+
+    savepdb system H_N_M_T.pdb
+    saveamberparm system H_N_M_T.prmtop H_N_M_T.inpcrd
+    quit
+    

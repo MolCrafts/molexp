@@ -1,0 +1,63 @@
+-I: Adding /home/x_jicli/miniconda3/envs/wflow/dat/leap/prep to search path.
+-I: Adding /home/x_jicli/miniconda3/envs/wflow/dat/leap/lib to search path.
+-I: Adding /home/x_jicli/miniconda3/envs/wflow/dat/leap/parm to search path.
+-I: Adding /home/x_jicli/miniconda3/envs/wflow/dat/leap/cmd to search path.
+-s: Ignoring all leaprc startup files.
+-f: Source tleap.in.
+
+Welcome to LEaP!
+Sourcing: ./tleap.in
+----- Source: /home/x_jicli/miniconda3/envs/wflow/dat/leap/cmd/leaprc.gaff
+----- Source of /home/x_jicli/miniconda3/envs/wflow/dat/leap/cmd/leaprc.gaff done
+Log file: ./leap.log
+Loading parameters: /home/x_jicli/miniconda3/envs/wflow/dat/leap/parm/gaff.dat
+Reading title:
+AMBER General Force Field for organic molecules (Version 1.81, May 2017)
+Loading Prep file: ./H.prepi
+Loading Prep file: ./N.prepi
+Loading Prep file: ./M.prepi
+Loading Prep file: ./T.prepi
+Loading parameters: ./H.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+Remark line goes here
+Loading parameters: ./N.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+Remark line goes here
+Loading parameters: ./M.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+Remark line goes here
+Loading parameters: ./T.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+Remark line goes here
+Writing pdb file: H_N_M_T.pdb
+Checking Unit.
+Building topology.
+Building atom parameters.
+Building bond parameters.
+Building angle parameters.
+Building proper torsion parameters.
+Building improper torsion parameters.
+old PREP-specified impropers:
+ <H 1>:  C5   C1   C    H4  
+ <H 1>:  C    C2   C1   H   
+ <H 1>:  C1   C3   C2   H1  
+ <H 1>:  C2   C4   C3   H2  
+ <H 1>:  C5   C3   C4   H3  
+ <H 1>:  C6   C    C5   C4  
+ <H 1>:  C5   S1   C6   S   
+ <N 2>:  C2   O    C3   O1  
+ <M 3>:  C    O4   C5   O2  
+ total 9 improper torsions applied
+ 9 improper torsions in old prep form
+Building H-Bond parameters.
+Incorporating Non-Bonded adjustments.
+Not Marking per-residue atom chain types.
+Marking per-residue atom chain types.
+ (no restraints)
+	Quit
+
+Exiting LEaP: Errors = 0; Warnings = 0; Notes = 0.

@@ -1,0 +1,9 @@
+tolerance 2.0
+    output H_N_M_T_n2.pdb
+    filetype pdb
+
+    structure H_N_M_T.pdb
+    number 2
+    inside cube 0. 0. 0. 21.25317138365222
+    end structure
+    

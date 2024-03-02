@@ -58,7 +58,6 @@ def submit():
             # we don't want to change the current working directory
             # until we are executing the function
             name = func.__name__
-            slurm_script_name = f"{name}.sub"
 
             # If the function is a generator, we need to block and monitor the task if required
             generator = func(*args, **kwargs)
@@ -67,16 +66,9 @@ def submit():
             # Run the command and capture the output
             print(arguments)
             job_id = qa.submit_job(
-                queue=arguments["queue"],
-                job_name=arguments["job_name"],
-                working_directory=arguments["working_directory"],
-                cores=arguments["cores"],
-                memory_max=arguments["memory_max"],
-                run_time_max=arguments["run_time_max"],
-                dependency_list=arguments["dependency_list"],
-                command=arguments["command"]
+                **arguments
             )
-
+            print(job_id)
             # slurm_task_info := Submitted batch job 30588834
 
             # TODO: blocked, but usually many workflow execute in parallel,

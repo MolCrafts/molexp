@@ -28,8 +28,8 @@ class Script:
         return self._raw
     
     @content.setter
-    def content(self, text:str):
-        self._raw = text.split('\n')
+    def content(self, text:list[str]):
+        self._raw = text
 
     def append(self, text: str):
         self._raw.extend(text.split('\n'))
@@ -46,9 +46,9 @@ class Script:
     @classmethod
     def open(self, name):
         with open(name, 'r') as f:
-            text = f.readlines()
+            content = f.readlines()
         script = Script(name)
-        script.text = text
+        script.content = content
         return script
 
     def save(self, path: Path | str=Path.cwd()):
