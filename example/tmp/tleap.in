@@ -3,17 +3,19 @@
     loadamberprep H.prepi
     loadamberprep N.prepi
     loadamberprep M.prepi
+    loadamberprep P.prepi
     loadamberprep T.prepi
     loadamberparams H.frcmod
     loadamberparams N.frcmod
     loadamberparams M.frcmod
+    loadamberparams P.frcmod
     loadamberparams T.frcmod
 
-    system = sequence { H N M N N M N N M N N M N N M N N M N N M N N M N T }
+    system = sequence { H N M N M N M P N M N M N M P N M N M N M P N M N M N M P N M N M N M P N M N M N M P N M N M N M P N M N M N M P T }
 
     
 
-    savepdb system NMN.pdb
-    saveamberparm system NMN.prmtop NMN.inpcrd
+    savepdb system NMNMNMP.pdb
+    saveamberparm system NMNMNMP.prmtop NMNMNMP.inpcrd
     quit
     

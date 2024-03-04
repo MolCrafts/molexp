@@ -6,44 +6,58 @@ import os
 from pathlib import Path
 
 from pysqa import QueueAdapter
+import time
 
 print(Path('.queues').absolute())
 qa = QueueAdapter(directory=".queues")
 
 class Monitor:
-    task_queue = []
+    job_queue = []
 
-    def __init__(self, task_id: int, user: str = None):
-        self.task_id = task_id
-        self.task_queue.append(self)
+    def __init__(self, job_id: int, user: str = None):
+        self.job_id = job_id
+        self.job_queue.append(self)
         self.user = user
 
-    def check_status(self):
-        check_cmd = f"squeue {self.task_id}"
-        if self.user:  # filter result by using user
-            check_cmd = f"squeue -u {self.user}"
-        subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
-        # TODO: parse the output and return status
-        # return status
-
-    @classmethod
-    def check_all(cls):
-        for task in cls.task_queue:
-            task.check_status()
-        # print/log
-
-    def wait(self):
-        while True:
-            if self.check_status() == "completed":
-                break
-            if self == self.task_queue[0]:
-                # only "main" monitor can print all tasks' status
-                self.check_all()
-            # sleep(interval)
+    def get_status(self):
+        return qa.get_status_of_job(self.job_id)
 
     def __del__(self):
-        self.task_queue.remove(self)
+        if self in self.job_queue:
+            self.job_queue.remove(self)
 
+    def __eq__(self, other:'Monitor'):
+        return self.job_id == other.job_id
+    
+    def wait(self, pool_interval=5):
+        while True:
+            status = self.get_status()
+            print(status)
+            if status == "completed":
+                break
+            elif status == "failed":
+                raise ValueError(f"Job {self.job_id} failed.")
+            else:
+                print(f"Job {self.job_id} is {status}.")
+            time.sleep(pool_interval)
+
+    @classmethod
+    def get_all_job_status(cls):
+        job_id = [monitor.job_id for monitor in cls.job_queue]
+        return qa.get_status_of_jobs(job_id)
+    
+    @classmethod
+    def wait_all(self, pool_interval=5):
+        while True:
+            status = self.get_all_job_status()
+            if all([s == "completed" for s in status]):
+                break
+            elif any([s == "failed" for s in status]):
+                raise ValueError(f"Job {self.job_id} failed.")
+            else:
+                print(f"Jobs are {status}.")
+            time.sleep(pool_interval)
+    
 
 def submit():
     """Decorator to run the result of a function as a command line command."""
@@ -68,7 +82,6 @@ def submit():
             job_id = qa.submit_job(
                 **arguments
             )
-            print(job_id)
             # slurm_task_info := Submitted batch job 30588834
 
             # TODO: blocked, but usually many workflow execute in parallel,
@@ -76,12 +89,8 @@ def submit():
             if monitor:
                 print(f"monitoring {job_id}")
                 # block and monitoring
-                # _monitor = Monitor(slurm_task_id)
-                # while True:
-                #     # if _monitor.status == "completed":
-                #     #     break
-                #     print("monitoring")
-                #     break
+                monitor = Monitor(job_id)
+                monitor.wait()
             try:
                 process_result = {"job_id": job_id}
                 generator.send(process_result)

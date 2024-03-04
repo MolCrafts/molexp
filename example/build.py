@@ -1,39 +1,53 @@
 import numpy as np
 import subprocess
-import nglview as ngl
-from ase.io import read, write
 from pathlib import Path
 from hamilton.function_modifiers import tag
 from itertools import cycle
-
-units_path = Path("./units")
-units_path.mkdir(parents=True, exist_ok=True)
-tmp_path = Path("./tmp")
-tmp_path.mkdir(parents=True, exist_ok=True)
-head_name = "H"
-n_name = "N"
-m_name = "M"
-tail_name = "T"
-pegm_name = "P"
-
+@tag(cache="pickle")
+def units_path()->Path:
+    units_path = Path("./units")
+    units_path.mkdir(parents=True, exist_ok=True)
+    return units_path
 
 @tag(cache="pickle")
-def parameterize() -> dict:
-    cmd = f"antechamber -i ../{units_path/f'H.pdb'} -fi pdb -o {f'H.ac'} -fo ac -at gaff -an y -c bcc -nc 0 -rn H  && mv sqm.pdb H.pdb"
-    subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
-    cmd = f"antechamber -i ../{units_path/f'N.pdb'} -fi pdb -o {f'N.ac'} -fo ac -at gaff -an y -c bcc -nc 1 -rn N  && mv sqm.pdb N.pdb"
-    subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
-    cmd = f"antechamber -i ../{units_path/f'M.pdb'} -fi pdb -o {f'M.ac'} -fo ac -at gaff -an y -c bcc -nc -1 -rn M  && mv sqm.pdb M.pdb"
-    subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
-    cmd = f"antechamber -i ../{units_path/f'T.pdb'} -fi pdb -o {f'T.ac'} -fo ac -at gaff -an y -c bcc -nc 0 -rn T  && mv sqm.pdb T.pdb"
+def tmp_path()->Path:
+    tmp_path = Path("./tmp")
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    return tmp_path
+
+def head_name()->str:
+    return "H"
+
+def n_name()->str:
+    return "N"
+
+def m_name()->str:
+    return "M"
+
+def tail_name()->str:
+    return "T"
+
+def pegm_name()->str:
+    return "P"
+
+@tag(cache="pickle")
+def call_antechamber(units_path:Path, tmp_path:Path) -> dict:
+    # cmd = f"antechamber -i ../{units_path/f'H.pdb'} -fi pdb -o {f'H.ac'} -fo ac -at gaff -an y -c bcc -nc 0 -rn H  && mv sqm.pdb H.pdb"
+    # subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
+    # cmd = f"antechamber -i ../{units_path/f'N.pdb'} -fi pdb -o {f'N.ac'} -fo ac -at gaff -an y -c bcc -nc 1 -rn N  && mv sqm.pdb N.pdb"
+    # subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
+    # cmd = f"antechamber -i ../{units_path/f'M.pdb'} -fi pdb -o {f'M.ac'} -fo ac -at gaff -an y -c bcc -nc -1 -rn M  && mv sqm.pdb M.pdb"
+    # subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
+    # cmd = f"antechamber -i ../{units_path/f'T.pdb'} -fi pdb -o {f'T.ac'} -fo ac -at gaff -an y -c bcc -nc 0 -rn T  && mv sqm.pdb T.pdb"
+    # subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
+    cmd = f"antechamber -i ../{units_path/f'P.pdb'} -fi pdb -o {f'P.ac'} -fo ac -at gaff -an y -c bcc -nc 0 -rn P  && mv sqm.pdb P.pdb"
     subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
     return {
-        'acs': [f'H.ac', f'N.ac', f'M.ac', f'T.ac'],
+        'acs': ['H.ac', 'N.ac', 'M.ac', 'T.ac', 'P.ac'],
     }
 
-
 @tag(cache="pickle")
-def define_connect(parameterize: dict) -> dict:
+def define_connect(call_antechamber: dict, tmp_path:Path, n_name:str, m_name:str, head_name:str, tail_name:str, pegm_name:str) -> dict:
 
     H_tail = 14
     H_omit = [15, 16, 17]
@@ -49,9 +63,9 @@ def define_connect(parameterize: dict) -> dict:
     T_head = 0
     T_omit = [8]
 
-    # P_head = 5
-    # P_tail = 0
-    # P_omit = [6, 7, 8, 2, 3, 4]
+    P_head = 5
+    P_tail = 0
+    P_omit = [6, 7, 8, 2, 3, 4]
 
     H = open(f"{tmp_path}/H", "w")
     h_ac = open(f"{tmp_path}/{head_name}.ac", "r")
@@ -73,10 +87,10 @@ def define_connect(parameterize: dict) -> dict:
     t = t_ac.readlines()[2:]
     t_ac.close()
 
-    # pegm = open(f'{tmp_path}/{pegm_name}.chain', 'w')
-    # p_ac = open(f'{tmp_path}/{pegm_name}.ac', 'r')
-    # p = p_ac.readlines()[2:]
-    # p_ac.close()
+    P = open(f'{tmp_path}/{pegm_name}', 'w')
+    p_ac = open(f'{tmp_path}/{pegm_name}.ac', 'r')
+    p = p_ac.readlines()[2:]
+    p_ac.close()
 
     H.write("TAIL_NAME " + str(h[H_tail].split()[2]) + "\n")
     for i in range(len(H_omit)):
@@ -103,11 +117,18 @@ def define_connect(parameterize: dict) -> dict:
         T.write("OMIT_NAME " + str(t[int(T_omit[i])].split()[2]) + "\n")
     T.write("CHARGE 0")
     T.close()
-    return parameterize
+
+    P.write("HEAD_NAME " + str(p[P_head].split()[2]) + "\n")
+    P.write("TAIL_NAME " + str(p[P_tail].split()[2]) + "\n")
+    for i in range(len(P_omit)):
+        P.write("OMIT_NAME " + str(p[int(P_omit[i])].split()[2]) + "\n")
+    P.write("CHARGE 0")
+
+    return call_antechamber
 
 
 # @tag(cache="pickle")
-def prepare(define_connect: dict) -> dict:
+def prepare(define_connect: dict, tmp_path:Path) -> dict:
     print('prep')
     cmd = f"prepgen -i H.ac -o H.prepi -f prepi -m H -rn H -rf H.res"
     subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
@@ -115,16 +136,14 @@ def prepare(define_connect: dict) -> dict:
     subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
     cmd = f"prepgen -i M.ac -o M.prepi -f prepi -m M -rn M -rf M.res"
     subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
-    # cmd = f"prepgen -i M.ac -o NMN.prepi -f prepi -m nmn -rn NMN -rf NMN.res"
-    # subprocess.run(cmd, shell=True, cwd=tmp_path)
-    # cmd = f"prepgen -i M.ac -o NMT.prepi -f prepi -m nmt -rn NMT -rf NMT.res"
-    # subprocess.run(cmd, shell=True, cwd=tmp_path)
+    cmd = f"prepgen -i P.ac -o P.prepi -f prepi -m P -rn P -rf P.res"
+    subprocess.run(cmd, shell=True, cwd=tmp_path)
     cmd = f"prepgen -i T.ac -o T.prepi -f prepi -m T -rn T -rf T.res"
     subprocess.run(cmd, shell=True, cwd=tmp_path, check=True)
     return define_connect
 
 # @tag(cache="pickle")
-def parmchk(prepare: dict) -> dict:
+def parmchk(prepare: dict, tmp_path:Path) -> dict:
 
     parm = lambda name: subprocess.run(
         f"parmchk2 -i {name}.prepi -f prepi -o {name}.frcmod", shell=True, cwd=tmp_path
@@ -134,11 +153,11 @@ def parmchk(prepare: dict) -> dict:
     parm("N")
     parm("M")
     parm("T")
+    parm("P")
     return prepare
 
-
 # @tag(cache="pickle")
-def connect(work_dir:str, repeat_unit: list[str], repeat: int, parmchk: dict) -> dict:
+def connect(work_dir:str, repeat_unit: list[str], repeat: int, parmchk: dict, tmp_path:Path) -> dict:
 
     seq = "H " + " ".join([" ".join(repeat_unit)]*repeat) + " T"
     print(f"{seq=}")
@@ -154,10 +173,12 @@ def connect(work_dir:str, repeat_unit: list[str], repeat: int, parmchk: dict) ->
     loadamberprep H.prepi
     loadamberprep N.prepi
     loadamberprep M.prepi
+    loadamberprep P.prepi
     loadamberprep T.prepi
     loadamberparams H.frcmod
     loadamberparams N.frcmod
     loadamberparams M.frcmod
+    loadamberparams P.frcmod
     loadamberparams T.frcmod
 
     system = sequence {{ {seq} }}
@@ -185,7 +206,7 @@ def connect(work_dir:str, repeat_unit: list[str], repeat: int, parmchk: dict) ->
 
 
 # @tag(cache="pickle")
-def pack(n_chains: int, density: float, connect: dict) -> dict:
+def pack(n_chains: int, density: float, connect: dict, tmp_path:Path) -> dict:
 
     filename = connect["filename"]
 
@@ -211,15 +232,14 @@ def pack(n_chains: int, density: float, connect: dict) -> dict:
     subprocess.run(f"packmol < input", shell=True, cwd=tmp_path)
     return connect
 
-
 # @tag(cache="pickle")
-def to_lammps(work_dir:str, n_chains: int, pack: dict) -> dict:
+def to_lammps(work_dir:str, n_chains: int, pack: dict, tmp_path:Path) -> dict:
 
     filename = pack["filename"]
     box_length = pack["box_length"]
 
     lmp = open(f"{work_dir}/{filename}_converted.lmp", "r")
-    pdb = open(f"tmp/{filename}_n{n_chains}.pdb", "r")
+    pdb = open(f"{tmp_path/filename}_n{n_chains}.pdb", "r")
     new_coords = []
     for line in pdb.readlines():
         if line.startswith("ATOM"):
@@ -356,6 +376,7 @@ def to_lammps(work_dir:str, n_chains: int, pack: dict) -> dict:
         f.writelines(new_lmp)
     print('ghadsa')
     return pack
+
 
 # @tag(cache="pickle")
 def copy_ff(work_dir:str, to_lammps: dict) -> dict:

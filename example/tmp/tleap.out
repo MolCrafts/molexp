@@ -16,6 +16,7 @@ AMBER General Force Field for organic molecules (Version 1.81, May 2017)
 Loading Prep file: ./H.prepi
 Loading Prep file: ./N.prepi
 Loading Prep file: ./M.prepi
+Loading Prep file: ./P.prepi
 Loading Prep file: ./T.prepi
 Loading parameters: ./H.frcmod
 Reading force field modification type file (frcmod)
@@ -29,19 +30,16 @@ Loading parameters: ./M.frcmod
 Reading force field modification type file (frcmod)
 Reading title:
 Remark line goes here
+Loading parameters: ./P.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+Remark line goes here
 Loading parameters: ./T.frcmod
 Reading force field modification type file (frcmod)
 Reading title:
 Remark line goes here
-Writing pdb file: NMN.pdb
+Writing pdb file: NMNMNMP.pdb
 Checking Unit.
-
-/home/x_jicli/miniconda3/envs/wflow/bin/teLeap: Warning!
-The unperturbed charge of the unit (7.999903) is not zero.
-
-/home/x_jicli/miniconda3/envs/wflow/bin/teLeap: Note.
-Ignoring the warning from Unit Checking.
-
 Building topology.
 Building atom parameters.
 Building bond parameters.
@@ -59,29 +57,61 @@ old PREP-specified impropers:
  <N 2>:  C2   O    C3   O1  
  <M 3>:  C    O4   C5   O2  
  <N 4>:  C2   O    C3   O1  
- <N 5>:  C2   O    C3   O1  
- <M 6>:  C    O4   C5   O2  
- <N 7>:  C2   O    C3   O1  
- <N 8>:  C2   O    C3   O1  
- <M 9>:  C    O4   C5   O2  
- <N 10>:  C2   O    C3   O1  
+ <M 5>:  C    O4   C5   O2  
+ <N 6>:  C2   O    C3   O1  
+ <M 7>:  C    O4   C5   O2  
+ <P 8>:  C1   O    C3   O1  
+ <N 9>:  C2   O    C3   O1  
+ <M 10>:  C    O4   C5   O2  
  <N 11>:  C2   O    C3   O1  
  <M 12>:  C    O4   C5   O2  
  <N 13>:  C2   O    C3   O1  
- <N 14>:  C2   O    C3   O1  
- <M 15>:  C    O4   C5   O2  
+ <M 14>:  C    O4   C5   O2  
+ <P 15>:  C1   O    C3   O1  
  <N 16>:  C2   O    C3   O1  
- <N 17>:  C2   O    C3   O1  
- <M 18>:  C    O4   C5   O2  
- <N 19>:  C2   O    C3   O1  
+ <M 17>:  C    O4   C5   O2  
+ <N 18>:  C2   O    C3   O1  
+ <M 19>:  C    O4   C5   O2  
  <N 20>:  C2   O    C3   O1  
  <M 21>:  C    O4   C5   O2  
- <N 22>:  C2   O    C3   O1  
+ <P 22>:  C1   O    C3   O1  
  <N 23>:  C2   O    C3   O1  
  <M 24>:  C    O4   C5   O2  
  <N 25>:  C2   O    C3   O1  
- total 31 improper torsions applied
- 31 improper torsions in old prep form
+ <M 26>:  C    O4   C5   O2  
+ <N 27>:  C2   O    C3   O1  
+ <M 28>:  C    O4   C5   O2  
+ <P 29>:  C1   O    C3   O1  
+ <N 30>:  C2   O    C3   O1  
+ <M 31>:  C    O4   C5   O2  
+ <N 32>:  C2   O    C3   O1  
+ <M 33>:  C    O4   C5   O2  
+ <N 34>:  C2   O    C3   O1  
+ <M 35>:  C    O4   C5   O2  
+ <P 36>:  C1   O    C3   O1  
+ <N 37>:  C2   O    C3   O1  
+ <M 38>:  C    O4   C5   O2  
+ <N 39>:  C2   O    C3   O1  
+ <M 40>:  C    O4   C5   O2  
+ <N 41>:  C2   O    C3   O1  
+ <M 42>:  C    O4   C5   O2  
+ <P 43>:  C1   O    C3   O1  
+ <N 44>:  C2   O    C3   O1  
+ <M 45>:  C    O4   C5   O2  
+ <N 46>:  C2   O    C3   O1  
+ <M 47>:  C    O4   C5   O2  
+ <N 48>:  C2   O    C3   O1  
+ <M 49>:  C    O4   C5   O2  
+ <P 50>:  C1   O    C3   O1  
+ <N 51>:  C2   O    C3   O1  
+ <M 52>:  C    O4   C5   O2  
+ <N 53>:  C2   O    C3   O1  
+ <M 54>:  C    O4   C5   O2  
+ <N 55>:  C2   O    C3   O1  
+ <M 56>:  C    O4   C5   O2  
+ <P 57>:  C1   O    C3   O1  
+ total 63 improper torsions applied
+ 63 improper torsions in old prep form
 Building H-Bond parameters.
 Incorporating Non-Bonded adjustments.
 Not Marking per-residue atom chain types.
@@ -89,4 +119,4 @@ Marking per-residue atom chain types.
  (no restraints)
 	Quit
 
-Exiting LEaP: Errors = 0; Warnings = 1; Notes = 1.
+Exiting LEaP: Errors = 0; Warnings = 0; Notes = 0.

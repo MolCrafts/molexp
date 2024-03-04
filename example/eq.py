@@ -45,8 +45,9 @@ def gen_eq_script(work_dir:str, copy_ff:dict)->dict:
     fix fprint all print 1000 "${{elapsed}} ${{tk}} ${{pr}} ${{vl}} ${{dn}} ${{et}} ${{ep}} ${{ek}}" file eq.thermo screen no
 
     fix 1 all npt temp 1000.0 1000.0 100.0 iso 1.0 1.0 1000 drag 2.0
-    run 1000000 every 10000 NULL
+    run 100000 every 10000 NULL
     run 1000000
+    write_data 1000K.data nocoeff
 
     fix 1 all npt temp 1000.0 900.0 100.0 iso 1.0 1.0 1000 drag 2.0
     run 100000
@@ -54,31 +55,12 @@ def gen_eq_script(work_dir:str, copy_ff:dict)->dict:
     run 100000
     fix 1 all npt temp 800.0 700.0 100.0 iso 1.0 1.0  1000 drag 2.0
     run 100000
-    fix 1 all npt temp 700.0 600.0 100.0 iso 1.0 1.0  1000 drag 2.0
-    run 100000
+    fix 1 all npt temp 700.0 500.0 100.0 iso 1.0 1.0  1000 drag 2.0
+    run 200000
 
-    write_data 600K.data nocoeff
+    write_data 500K.data nocoeff
 
     """
     script.substitute(rdm=312)
     script.save(work_dir)
     return copy_ff
-
-@me.submit()
-def submit_eq(work_dir:str, repeat_unit:list[str], repeat:int, gen_eq_script:dict)->dict:
-    job_name = f"{''.join(repeat_unit)}x{repeat}"
-    tmp = dict(
-        queue="slurm",
-        job_name=job_name,
-        working_directory=work_dir,
-        ncores=32,
-        # memory_max="8G",
-        run_time_max= 1e5,
-        dependency_list=None,
-        monitor=False,
-        command=f"mpprun ~/.local/bin/lmp -in eq.in",
-    )
-    tmp['account'] = 'naiss2023-1-37'
-    # return submit config
-    yield tmp
-    return {}
