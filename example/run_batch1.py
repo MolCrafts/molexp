@@ -26,7 +26,6 @@ dr = (
     .with_modules(build, eq, tg)
     # .with_config(config)
     .with_adapters(tracker_hook, CachingGraphAdapter(".cache"))
-    .enable_dynamic_execution(allow_experimental_mode=True)
     .with_execution_manager(execution_manager)
     .build()
 )
