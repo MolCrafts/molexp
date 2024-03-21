@@ -12,7 +12,7 @@ def echo_1(start: str) -> str:
     return f'echo "1: {start}"'
 
 
-@tag(cache="pickle")
+@tag(cache="pickle", cmdline="slurm")
 @slurm(
     "./workdir",  # chdir and save submit script to here,
     # candidate API:
