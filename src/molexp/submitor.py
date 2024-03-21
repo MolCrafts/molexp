@@ -1,103 +1,168 @@
-# author: Roy Kid
-# contact: lijichen365@126.com
-# date: 2023-12-01
-# version: 0.0.1
-
-from .script import Script
 from pathlib import Path
+import inspect
+import functools
 import subprocess
-import logging
-from functools import wraps
+from enum import Enum
+
+def setup_adapter(cluster_name: str, cluster_type: str):
+    if cluster_type == "slurm":
+        return SlurmAdapter(cluster_name)
+    else:
+        raise ValueError(f"Cluster type {cluster_type} not supported.")
+
+class SubmitAdapter:
+
+    def __init__(self, cluster_name: str, cluster_type: str):
+        self.cluster_name = cluster_name
+        self.cluster_type = cluster_type
+
+        self.queue: list[int] = []
+
+    def __repr__(self):
+        return f"<SubmitAdapter: {self.cluster_name}({self.cluster_type})>"
+
+    def _write_submit_script(self, script_name: str, **args):
+        raise NotImplementedError
+    
+    def query(self, job_id: int|None):
+        raise NotImplementedError
+    
+    def watch(self, job_id: int):
+        self.queue.append(job_id)
 
 
-__all__ = ['SlurmSubmitor', 'submit', 'work_at']
+class SlurmAdapter(SubmitAdapter):
 
-class Monitor:
+    def __init__(self, cluster_name: str):
+        super().__init__(cluster_name, "slurm")
 
-    def __init__(self):
+    def submit(
+        self,
+        cmd: list[str],
+        job_name: str,
+        n_cores: int,
+        memory_max: int | None = None,
+        run_time_max: str | int | None = None,
+        work_dir: Path | str | None = None,
+        script_name: str|Path = "run_slurm.sh",
+        **slurm_args,
+    ):
 
-        self.job_pool = {}
-        self.logger = logging.getLogger(self.__class__.__name__)
+        slurm_args["--job-name"] = job_name
+        slurm_args["--cpus-per-task"] = n_cores
+        if memory_max:
+            slurm_args["--mem"] = memory_max
+        if run_time_max:
+            slurm_args["--time"] = run_time_max
+        if work_dir:
+            slurm_args["--chdir"] = work_dir
 
-    def add_job(self, job_id, job_name):
-        self.job_pool[job_id] = job_name
+        self._write_submit_script(Path(script_name), cmd, **slurm_args)
 
-    def remove_job(self, job_id):
-        self.job_pool.pop(job_id)
+        proc = subprocess.run(f"sbatch --parsable {script_name}", shell=True, check=True, capture_output=True)
+        job_id = int(proc.stdout)
 
-    def status(self, job_id):
-        out = subprocess.check_output(f'squeue -j {job_id}', shell=True)
-        out = out.decode('utf-8')
-        lines = out.split('\n')
-        line = list(map(lambda x: x.startswirh(str(job_id)), lines))
-        assert len(line) > 0, 'multiple jobs found, please check!'
-        # 29417953 tetralith tg_mil1_  x_jicli  R      23:51      2 n[1790,1795]
-        job_id, partition, name, user, status, time, nodes, node_info = line[0].split(' ')
-        self.logger.info(f'Job {job_id} status: {status}')
-        return status
-        
+        self.watch(job_id)
 
-class SlurmSubmitor(Script):
+        return job_id
 
-    monitor = Monitor()
+    def _write_submit_script(self, script_path: Path, cmd: list[str], **args):
+        # assert script_path.exists(), f"Script path {script_path} does not exist."
+        with open(script_path, "w") as f:
+            f.write("#!/bin/bash\n")
+            for key, value in args.items():
+                f.write(f"#SBATCH {key} {value}\n")
+            f.write("\n")
+            f.write("\n".join(cmd))
+            f.write("\n")
 
-    def __init__(self, config:dict, name:str='submit', ext:str='sh', is_block:bool=False):
-        super().__init__(name, ext)
-        self._config = config
-        self.logger = logging.getLogger(self.__class__.__name__)
+    def query(self, job_id: int):
+        proc = subprocess.run(f"squeue -j {job_id}", shell=True, check=True, capture_output=True)
+        info = proc.stdout.split("\n")
+        header = info[0]
+        info_dict = {k: v for k, v in zip(header.split(), info[1].split())}
+        return info_dict
 
-    def submit(self, path: Path | str = Path.cwd()):
-        # write down
-        config_lines = []
-        config_lines.append('#!/bin/bash')
-        for k, v in self._config.items():
-            config_lines.append(f'#SBATCH {k} {v}')
-        config_lines.append('\n')
+    def remote_submit(self):
+        pass
 
-        self._content_list = config_lines + self._content_list
 
-        path = Path(path)
-        self.save(path)
+class Submitor:
 
-        proc = subprocess.call(f'sbatch {self.full_name}', shell=True, cwd=path, capture_output=True)
-        stdout = proc.stdout.decode('utf-8')
-        stderr = proc.stderr.decode('utf-8')
-        if stderr:
-            self.logger.error(f'Submit {self.full_name} to {path} failed!')
-            self.logger.error(stderr)
-        else:
-            # example: Submitted batch job 123456
-            job_id = stdout.split(' ')[-1]
-            self.logger.info(f'{self.full_name}({job_id}) submitted')
-        
-        if self.is_block:
-            self.monitor.add_job(job_id, self.full_name)
-            while self.monitor(job_id) == 'R':
-                time.sleep(60)
+    cluster: dict[str, SubmitAdapter] = {}
 
-def work_at(workdir:Path|str=Path.cwd()):
-    def _cd(func):
-        @wraps(func)
+    def __new__(cls, cluster_name: str, cluster_type: str=None):
+
+        if cluster_name not in Submitor.cluster:
+            cls.cluster[cluster_name] = setup_adapter(cluster_name, cluster_type)
+
+        return super().__new__(cls)
+
+    def __init__(self, cluster_name: str, *args, **kwargs):
+        self._adapter = Submitor.cluster[cluster_name]
+
+    def submit(
+        self,
+        cmd: list[str],
+        job_name: str,
+        n_cores: int,
+        memory_max: int | None = None,
+        run_time_max: str | int | None = None,
+        script_name: str|Path|None = "run_slurm.sh",
+        uploads: list[Path] | None = None,
+        downloads: list[Path] | None = None,
+        is_monitor: bool = True,
+        **slurm_args,
+    ):
+        print(script_name)
+        job_id = self._adapter.submit(
+            cmd, job_name, n_cores, memory_max, run_time_max, script_name, **slurm_args
+        )
+
+        # TODO: Monitoring
+        return job_id
+    
+    def query(self, job_id: int):
+        return self._adapter.query(job_id)
+    
+    @property
+    def queue(self):
+        return self._adapter.queue
+
+
+def submit(cluster_name: str, cluster_type: str):
+    """Decorator to run the result of a function as a command line command."""
+    submitor = Submitor(cluster_name, cluster_type)
+
+    def decorator(func):
+        if not inspect.isgeneratorfunction(func):
+            raise ValueError("Function must be a generator.")
+
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            olddir = os.cwd()
-            os.chdir(workdir)
-            results = func(*args, **kwargs)
-            os.chdir(olddir)
-            return results
-        return wrapper
-    return _cd
 
-def submit(cmd:str, type:str, is_block:bool, config:dict, name:str='submit', ext:str='sh'):
-    def _submit(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            result = func(*args, **kwargs)
-            if type == 'slurm':
-                submitor = SlurmSubmitor(config, name, ext, is_block)
-                submitor.append(cmd)
-                submitor.submit(os.cwd())
+            # submit docrated function must be a generator
+            generator = func(*args, **kwargs)
+            arguments: dict = next(generator)
+            is_remote = arguments.pop("is_remote", False)
+            if is_remote:
+                # submitor = Submitor.remote_submit()
+                pass
             else:
-                raise NotImplementedError(f'submit type {type} not implemented!')
+                job_id = submitor.submit(**arguments)
+            
+            try:
+                generator.send(job_id)
+                # ValueError should not be hit because a StopIteration should be raised, unless
+                # there are multiple yields in the generator.
+                raise ValueError("Generator cannot have multiple yields.")
+            except StopIteration as e:
+                result = e.value
+
             return result
+
+        # get the return type and set it as the return type of the wrapper
+        wrapper.__annotations__["return"] = inspect.signature(func).return_annotation
         return wrapper
-    return _submit
+
+    return decorator
