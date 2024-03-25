@@ -2,24 +2,93 @@ from pathlib import Path
 import inspect
 import functools
 import subprocess
-from enum import Enum
+import multiprocessing
 
 def setup_adapter(cluster_name: str, cluster_type: str):
     if cluster_type == "slurm":
         return SlurmAdapter(cluster_name)
     else:
         raise ValueError(f"Cluster type {cluster_type} not supported.")
+    
+
+class Monitor:
+    """
+    Global monitor for all jobs submitted. It runs in a separate process and queries the status of all jobs in different clusters.
+    """
+    monitor_process: subprocess.Popen | None = None
+    monitor_jobs: list[int] = []
+
+    def __init__(self, query_mehtod: callable, interval: int = 60):
+        self.query_method = query_mehtod
+        self.interval = interval
+
+    def start(self):
+        if Monitor.monitor_process is None:
+            Monitor.monitor_process = multiprocessing.Process(target=self._monitor)
+            Monitor.monitor_process.start()
+
+    def watch(self, job_id: int):
+        Monitor.monitor_jobs.append(job_id)
+        # for example, if we want to submit 20 jobs with a loop, we dont know which submit is last one:
+        # ```
+        # for inputs in inputs_list:
+        #     dr.execute(inputs)
+        # ```
+        # so we need to restart multiprocessing for each execution
+        #   to update monitor_jobs list
+
+        # or we set a global flag e.g.:
+        # ```
+        # for inputs in inputs_list:
+        #     dr.execute(inputs)
+        # import Monitor
+        # proc: Popen = Monitor.start()
+        # ````
+        # then we maybe can finish our workflow as non-blocking mode,
+        # when we want to know the status of jobs, 
+        # we can manually get process from background
+        self.start()
+
+    def _monitor(self):
+        while True:
+            for job_id in self.monitor_jobs:
+                info = self.query_method(job_id)
+                print(info)
+
 
 class SubmitAdapter:
 
-    def __init__(self, cluster_name: str, cluster_type: str):
+    def __init__(self, cluster_name: str, cluster_type: str, is_monitor: bool = True):
         self.cluster_name = cluster_name
         self.cluster_type = cluster_type
 
         self.queue: list[int] = []
+        self.is_monitor = is_monitor
+        if self.is_monitor:
+            self.monitor = Monitor()
 
     def __repr__(self):
         return f"<SubmitAdapter: {self.cluster_name}({self.cluster_type})>"
+    
+    def submit(
+        self,
+        cmd: list[str],
+        job_name: str,
+        n_cores: int,
+        memory_max: int | None = None,
+        run_time_max: str | int | None = None,
+        work_dir: Path | str | None = None,
+        script_name: str|Path = "run_slurm.sh",
+        **args,
+    ):
+        raise NotImplementedError
+    
+    def remote_submit(self):
+        # TODO: use ssh and scp to submit job to remote cluster
+        # third-party library: paramiko
+        # license: LGPL
+        # https://www.paramiko.org/
+        raise NotImplementedError
 
     def _write_submit_script(self, script_name: str, **args):
         raise NotImplementedError
@@ -29,6 +98,9 @@ class SubmitAdapter:
     
     def watch(self, job_id: int):
         self.queue.append(job_id)
+        if self.is_monitor:
+            self.monitor.watch(job_id)
+
 
 
 class SlurmAdapter(SubmitAdapter):
@@ -111,15 +183,12 @@ class Submitor:
         script_name: str|Path|None = "run_slurm.sh",
         uploads: list[Path] | None = None,
         downloads: list[Path] | None = None,
-        is_monitor: bool = True,
         **slurm_args,
     ):
-        print(script_name)
         job_id = self._adapter.submit(
             cmd, job_name, n_cores, memory_max, run_time_max, script_name, **slurm_args
         )
 
-        # TODO: Monitoring
         return job_id
     
     def query(self, job_id: int):
