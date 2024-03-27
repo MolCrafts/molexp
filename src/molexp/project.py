@@ -1,94 +1,69 @@
 from hamilton import driver
+from hamilton.graph_types import HamiltonGraph
 from hamilton.io.materialization import to
 from hamilton.experimental.h_cache import CachingGraphAdapter
-from hamilton.plugins import h_experiments, matplotlib_extensions, pandas_extensions  # noqa: F401
+from hamilton.plugins import h_experiments
 from hamilton.function_modifiers import tag, value, parameterize
-
-from molexp.cmdline import CMDLineExecutionManager
+from hamilton.execution.executors import DefaultExecutionManager, TaskExecutor
 from hamilton.execution import executors
 
-from .param import Param
+import os
+from pathlib import Path
 
-def _execute(*args, **kwargs):
-    tracker_hook = h_experiments.ExperimentTracker(
-        experiment_name="exp",
-        base_directory="./experiments",
-    )
+from .param import Param, ParamList
 
-    execution_manager = CMDLineExecutionManager(
-        executors.SynchronousLocalTaskExecutor(),
-        executors.SynchronousLocalTaskExecutor(),
-    )
+class ExperimentTracker(h_experiments.ExperimentTracker):
 
-    materializers = [
-        to.pickle(
-            id="after_build",
-            dependencies=["submit"],
-            path="/proj/snic2021-5-546/users/x_jicli/exp/.cache/to_lammps.pickle",
-        )
-    ]
+    def run_before_graph_execution(self, *, graph: HamiltonGraph, inputs: driver.Dict[str, driver.Any], overrides: driver.Dict[str, driver.Any], **kwargs):
+        print(f"inputs: {inputs}")
+        print(f"init_directory: {self.init_directory}")
+        print(f"run_directory: {self.run_directory}")
+        super().run_before_graph_execution(graph=graph, inputs=inputs, overrides=overrides, **kwargs)
+        # TODO: how to make graph execute in run_directory
+        # so output from cmdline execution will be saved in run_directory
+        os.chdir(Path(self.run_directory))
 
-    # jichen: Can we use `materialize` to make seperated experiment folder,
-    # or mkdir manually? 
-    Path(inputs["work_dir"]).mkdir(exist_ok=True)
-
-    meta, _ = dr.materialize(*materializers, inputs=inputs)
-    return meta
+    def run_after_graph_execution(self, *, success: bool, **kwargs):
+        super().run_after_graph_execution(success=success, **kwargs)
+        os.chdir(Path(self.init_directory))
 
 class Project:
 
-    def __init__(self, name: str):
-        self.dr = (
-        driver.Builder()
-        .with_modules(build, eq, tg)
-        # .with_config(config)
-        .with_adapters(tracker_hook, CachingGraphAdapter(".cache"))
-        .enable_dynamic_execution(allow_experimental_mode=True)
-        .with_execution_manager(execution_manager)
-        .build()
-    )
-        self.experiments = {}
+    def __init__(self, name: str, work_dir: str | Path = Path.cwd()):
         
-
-    def execute(self, param_list: list[Param], ):
+        self.name = name
+        self.experiments = {}
+        self.work_dir = work_dir
+        
+    def execute(self, param_list: ParamList, final_var, *modules):
         """
-        execute experiments parallelly
+        initialize experiments
         """
-        hamiltom_params = {}
+        tracker_hook = ExperimentTracker(
+            experiment_name=self.name,
+            base_directory=self.work_dir,
+        )
 
-        for param in param_list:
-            exp_name = '_'.join(f"{k}x{v}" for k, v in param.items())
-            hamiltom_params[exp_name] = param
-
-        # TODO: dynamic generate parametrize function
-        # 1. change signature according params
-        # signature = {k: type(v) for k, v in param.items()}
-        # 2. parametrize function
-        # parameterize_exec_fc = parameterize(**hamiltom_params)(exec_fc)
-        # 3. save function in another file (new_module)
-        # inspect.getsource(parameterize_exec_fc) -> save in new_module.py
-        # 4. import new_module
-        # dr.with_modules(new_module)
-
-        execution_manager = CMDLineExecutionManager(
+        execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(20),
         )
-
+        
         dr = (
             driver.Builder()
-            .with_modules(new_module)
-            # .with_config(config)
+            .with_modules(*modules)
             .enable_dynamic_execution(allow_experimental_mode=True)
             .with_execution_manager(execution_manager)
+            .with_adapters(tracker_hook)
             .build()
         )
-        # dr.display_all_functions("run_batch1.png")
-        dr.execute([dr.list_available_variables()])
+        for param in param_list:  # TODO: parallelize
+            self.experiments[param.name] = param
+            dr.execute(final_var, inputs={'param': param})
 
     def list(self):
         """list all experiment"""
-        pass
+        return self.experiments
 
     def group(self, key: str):
         """group experiments by key, since we need to average the results

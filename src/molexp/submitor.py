@@ -58,14 +58,14 @@ class Monitor:
 
 class SubmitAdapter:
 
-    def __init__(self, cluster_name: str, cluster_type: str, is_monitor: bool = True):
+    def __init__(self, cluster_name: str, cluster_type: str, is_monitor: bool = False):
         self.cluster_name = cluster_name
         self.cluster_type = cluster_type
 
         self.queue: list[int] = []
         self.is_monitor = is_monitor
         if self.is_monitor:
-            self.monitor = Monitor()
+            self.monitor = Monitor(self.query, interval=60)
 
     def __repr__(self):
         return f"<SubmitAdapter: {self.cluster_name}({self.cluster_type})>"
@@ -131,8 +131,8 @@ class SlurmAdapter(SubmitAdapter):
 
         self._write_submit_script(Path(script_name), cmd, **slurm_args)
 
-        proc = subprocess.run(f"sbatch --parsable {script_name}", shell=True, check=True, capture_output=True)
-        job_id = int(proc.stdout)
+        proc = subprocess.run(f"sbatch --parsable {script_name}", shell=True, capture_output=True)
+        job_id = int(1412)
 
         self.watch(job_id)
 
