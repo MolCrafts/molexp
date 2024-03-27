@@ -15,9 +15,6 @@ from .param import Param, ParamList
 class ExperimentTracker(h_experiments.ExperimentTracker):
 
     def run_before_graph_execution(self, *, graph: HamiltonGraph, inputs: driver.Dict[str, driver.Any], overrides: driver.Dict[str, driver.Any], **kwargs):
-        print(f"inputs: {inputs}")
-        print(f"init_directory: {self.init_directory}")
-        print(f"run_directory: {self.run_directory}")
         super().run_before_graph_execution(graph=graph, inputs=inputs, overrides=overrides, **kwargs)
         # TODO: how to make graph execute in run_directory
         # so output from cmdline execution will be saved in run_directory
@@ -35,7 +32,7 @@ class Project:
         self.experiments = {}
         self.work_dir = work_dir
         
-    def execute(self, param_list: ParamList, final_var, *modules):
+    def execute(self, param_list: ParamList, materilizers:list|None=None, *modules:list):
         """
         initialize experiments
         """
@@ -48,7 +45,7 @@ class Project:
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(20),
         )
-        
+
         dr = (
             driver.Builder()
             .with_modules(*modules)
@@ -59,7 +56,13 @@ class Project:
         )
         for param in param_list:  # TODO: parallelize
             self.experiments[param.name] = param
-            dr.execute(final_var, inputs={'param': param})
+            dr.visualize_materialization(
+                *materilizers,
+                inputs={'param': param},
+                output_file_path=f"{tracker_hook.run_directory}/dag",
+                render_kwargs=dict(view=False, format="png")
+            )
+            dr.materialize(*materilizers, inputs={'param': param})
 
     def list(self):
         """list all experiment"""

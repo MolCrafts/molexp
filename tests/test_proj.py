@@ -1,6 +1,8 @@
 import molexp as me
 from pathlib import Path
 
+from hamilton.io.materialization import to
+
 def print_param(param:me.Param)->me.Param:
     print(param)
     return param
@@ -34,5 +36,12 @@ class TestProject:
 
         proj = me.Project("test", Path.cwd()/'exp')
         import test_proj
-        out = proj.execute(param_list, ['submit'], test_proj)
+        materializers = [
+            to.pickle(
+                id='param_c_pickle',
+                dependencies=['calc_params'],
+                path='./param_c.pkl'
+            )
+        ]
+        out = proj.execute(param_list, materializers, test_proj)
         print(out)
