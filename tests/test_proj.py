@@ -34,7 +34,7 @@ class TestProject:
 
         param_list = params.product()
 
-        proj = me.Project("test", Path.cwd()/'exp')
+        proj = me.Project("test", Path.cwd())
         import test_proj
         materializers = [
             to.pickle(

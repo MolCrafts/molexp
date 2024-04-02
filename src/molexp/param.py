@@ -3,6 +3,7 @@ from itertools import product
 
 class Param(dict):
     
+    @property
     def name(self):
         return '_'.join(f"{k}x{v}" for k, v in self.items())
 

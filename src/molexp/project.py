@@ -1,68 +1,112 @@
 from hamilton import driver
-from hamilton.graph_types import HamiltonGraph
-from hamilton.io.materialization import to
 from hamilton.experimental.h_cache import CachingGraphAdapter
 from hamilton.plugins import h_experiments
-from hamilton.function_modifiers import tag, value, parameterize
-from hamilton.execution.executors import DefaultExecutionManager, TaskExecutor
+from hamilton.function_modifiers import value, parameterize, resolve, ResolveAt
+from hamilton.execution.executors import DefaultExecutionManager
 from hamilton.execution import executors
 
 import os
 from pathlib import Path
 
 from .param import Param, ParamList
+from hamilton import settings
 
-class ExperimentTracker(h_experiments.ExperimentTracker):
 
-    def run_before_graph_execution(self, *, graph: HamiltonGraph, inputs: driver.Dict[str, driver.Any], overrides: driver.Dict[str, driver.Any], **kwargs):
-        super().run_before_graph_execution(graph=graph, inputs=inputs, overrides=overrides, **kwargs)
-        # TODO: how to make graph execute in run_directory
-        # so output from cmdline execution will be saved in run_directory
-        os.chdir(Path(self.run_directory))
+def execute_exp(
+    name: str, root: str, param: Param, materilizers: list, config: dict, modules: tuple
+) -> None:
+    tracker_hook = h_experiments.ExperimentTracker(
+        experiment_name=name,
+        base_directory=root,
+    )
+    execution_manager = DefaultExecutionManager(
+        executors.SynchronousLocalTaskExecutor(),
+        executors.MultiThreadingExecutor(20),
+    )
+    dr = (
+        driver.Builder()
+        .with_modules(*modules)
+        .enable_dynamic_execution(allow_experimental_mode=True)
+        .with_execution_manager(execution_manager)
+        .with_config(config)
+        .with_adapters(tracker_hook)
+        .build()
+    )
+    dr.materialize(*materilizers, inputs={"param": param})
 
-    def run_after_graph_execution(self, *, success: bool, **kwargs):
-        super().run_after_graph_execution(success=success, **kwargs)
-        os.chdir(Path(self.init_directory))
 
 class Project:
 
     def __init__(self, name: str, work_dir: str | Path = Path.cwd()):
-        
+
         self.name = name
         self.experiments = {}
-        self.work_dir = work_dir
-        
-    def execute(self, param_list: ParamList, materilizers:list|None=None, *modules:list):
-        """
-        initialize experiments
-        """
-        tracker_hook = ExperimentTracker(
-            experiment_name=self.name,
-            base_directory=self.work_dir,
+        self.root = Path(work_dir) / name
+        self.pre_exec_dir = self.root / ".pre_exec"
+        if not self.pre_exec_dir.exists():
+            self.pre_exec_dir.mkdir(parents=True, exist_ok=True)
+
+    def pre_execute(self, final_vars, overrides, inputs, *modules: list):
+
+        execution_manager = DefaultExecutionManager(
+            executors.SynchronousLocalTaskExecutor(),
+            executors.MultiThreadingExecutor(20),
         )
+        os.chdir(self.pre_exec_dir)
+        cache = self.pre_exec_dir / ".cache"
+        if not cache.exists():
+            cache.mkdir(parents=True, exist_ok=True)
+        dr = (
+            driver.Builder()
+            .with_modules(*modules)
+            .enable_dynamic_execution(allow_experimental_mode=True)
+            .with_execution_manager(execution_manager)
+            .with_adapters(CachingGraphAdapter(str(cache)))
+            .build()
+        )
+        dr.execute(
+            final_vars=final_vars,
+            overrides=overrides,
+            inputs=inputs,
+        )
+        os.chdir(self.root)
+
+    def execute(self, param_list: ParamList, materilizers: list | None = None, *modules: list):
 
         execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(20),
         )
 
+        from molexp import project
+
+        parameters = {param.name: {k: value(v) for k, v in param.items()} for param in param_list}
+        exp_names = {param.name: {"name": value(param.name)} for param in param_list}
+        parameters.update(exp_names)
+        project.execute_exp = resolve(
+            when=ResolveAt.CONFIG_AVAILABLE, decorate_with=lambda: parameterize(**parameters)
+        )(project.execute_exp)
+
         dr = (
             driver.Builder()
-            .with_modules(*modules)
+            .with_modules(project)
             .enable_dynamic_execution(allow_experimental_mode=True)
             .with_execution_manager(execution_manager)
-            .with_adapters(tracker_hook)
+            .with_config({settings.ENABLE_POWER_USER_MODE: True})
             .build()
         )
-        for param in param_list:  # TODO: parallelize
-            self.experiments[param.name] = param
-            dr.visualize_materialization(
-                *materilizers,
-                inputs={'param': param},
-                output_file_path=f"{tracker_hook.run_directory}/dag",
-                render_kwargs=dict(view=False, format="png")
-            )
-            dr.materialize(*materilizers, inputs={'param': param})
+
+        dr.execute(
+            final_vars=list(exp_names.keys()),
+            inputs={
+                "root": str(self.root),
+                "materilizers": materilizers,
+                "config": {},
+                "modules": modules,
+                "param": param_list[0],
+                "name": param_list[0].name,
+            },
+        )
 
     def list(self):
         """list all experiment"""
@@ -76,6 +120,7 @@ class Project:
             ave_results = np.mean([exp.get_something for exp in project.group('id')])
         """
         pass
+
 
 class Experiment:
 
