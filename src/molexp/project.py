@@ -19,6 +19,7 @@ def execute_exp(
         experiment_name=name,
         base_directory=root,
     )
+    os.chdir(tracker_hook.run_directory)
     execution_manager = DefaultExecutionManager(
         executors.SynchronousLocalTaskExecutor(),
         executors.MultiThreadingExecutor(20),
@@ -32,7 +33,7 @@ def execute_exp(
         .with_adapters(tracker_hook)
         .build()
     )
-    dr.materialize(*materilizers, inputs={"param": param})
+    dr.materialize(*materilizers, inputs=dict(param))
 
 
 class Project:
@@ -41,19 +42,23 @@ class Project:
 
         self.name = name
         self.experiments = {}
-        self.root = Path(work_dir) / name
-        self.pre_exec_dir = self.root / ".pre_exec"
+        self._root = Path(work_dir).absolute() / name
+        self.pre_exec_dir = Path(self.root) / ".pre_exec"
         if not self.pre_exec_dir.exists():
             self.pre_exec_dir.mkdir(parents=True, exist_ok=True)
 
-    def pre_execute(self, final_vars, overrides, inputs, *modules: list):
+    @property
+    def root(self):
+        return self._root
+
+    def pre_execute(self, materilizers:list, *modules: list):
 
         execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(20),
         )
         os.chdir(self.pre_exec_dir)
-        cache = self.pre_exec_dir / ".cache"
+        cache = Path(".cache")
         if not cache.exists():
             cache.mkdir(parents=True, exist_ok=True)
         dr = (
@@ -64,10 +69,8 @@ class Project:
             .with_adapters(CachingGraphAdapter(str(cache)))
             .build()
         )
-        dr.execute(
-            final_vars=final_vars,
-            overrides=overrides,
-            inputs=inputs,
+        dr.materialize(
+            *materilizers
         )
         os.chdir(self.root)
 
