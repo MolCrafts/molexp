@@ -2,7 +2,7 @@ from pathlib import Path
 import inspect
 import functools
 import subprocess
-import multiprocessing
+from time import sleep
 
 def setup_adapter(cluster_name: str, cluster_type: str):
     if cluster_type == "slurm":
@@ -11,61 +11,54 @@ def setup_adapter(cluster_name: str, cluster_type: str):
         raise ValueError(f"Cluster type {cluster_type} not supported.")
     
 
-class Monitor:
-    """
-    Global monitor for all jobs submitted. It runs in a separate process and queries the status of all jobs in different clusters.
-    """
-    monitor_process: subprocess.Popen | None = None
-    monitor_jobs: list[int] = []
+# class Monitor:
+#     """
+#     Global monitor for all jobs submitted. It runs in a separate process and queries the status of all jobs in different clusters.
+#     """
+#     monitor_process: subprocess.Popen | None = None
+#     monitor_jobs: list[int] = []
 
-    def __init__(self, query_mehtod: callable, interval: int = 60):
-        self.query_method = query_mehtod
-        self.interval = interval
+#     def __init__(self, query_mehtod: callable, interval: int = 60):
+#         self.query_method = query_mehtod
+#         self.interval = interval
 
-    def start(self):
-        if Monitor.monitor_process is None:
-            Monitor.monitor_process = multiprocessing.Process(target=self._monitor)
-            Monitor.monitor_process.start()
+#     def start(self):
+#         if Monitor.monitor_process is None:
+#             Monitor.monitor_process = multiprocessing.Process(target=self._monitor)
+#             Monitor.monitor_process.start()
 
-    def watch(self, job_id: int):
-        Monitor.monitor_jobs.append(job_id)
-        # for example, if we want to submit 20 jobs with a loop, we dont know which submit is last one:
-        # ```
-        # for inputs in inputs_list:
-        #     dr.execute(inputs)
-        # ```
-        # so we need to restart multiprocessing for each execution
-        #   to update monitor_jobs list
+#     def watch(self, job_id: int):
+#         Monitor.monitor_jobs.append(job_id)
+#         # for example, if we want to submit 20 jobs with a loop, we dont know which submit is last one:
+#         # ```
+#         # for inputs in inputs_list:
+#         #     dr.execute(inputs)
+#         # ```
+#         # so we need to restart multiprocessing for each execution
+#         #   to update monitor_jobs list
 
-        # or we set a global flag e.g.:
-        # ```
-        # for inputs in inputs_list:
-        #     dr.execute(inputs)
-        # import Monitor
-        # proc: Popen = Monitor.start()
-        # ````
-        # then we maybe can finish our workflow as non-blocking mode,
-        # when we want to know the status of jobs, 
-        # we can manually get process from background
-        self.start()
+#         # or we set a global flag e.g.:
+#         # ```
+#         # for inputs in inputs_list:
+#         #     dr.execute(inputs)
+#         # import Monitor
+#         # proc: Popen = Monitor.start()
+#         # ````
+#         # then we maybe can finish our workflow as non-blocking mode,
+#         # when we want to know the status of jobs, 
+#         # we can manually get process from background
+#         self.start()
 
-    def _monitor(self):
-        while True:
-            for job_id in self.monitor_jobs:
-                info = self.query_method(job_id)
-                print(info)
+#     def _monitor(self):
 
 
 class SubmitAdapter:
 
-    def __init__(self, cluster_name: str, cluster_type: str, is_monitor: bool = False):
+    def __init__(self, cluster_name: str, cluster_type: str):
         self.cluster_name = cluster_name
         self.cluster_type = cluster_type
 
-        self.queue: list[int] = []
-        self.is_monitor = is_monitor
-        if self.is_monitor:
-            self.monitor = Monitor(self.query, interval=60)
+        # self.queue: list[int] = []
 
     def __repr__(self):
         return f"<SubmitAdapter: {self.cluster_name}({self.cluster_type})>"
@@ -97,9 +90,10 @@ class SubmitAdapter:
         raise NotImplementedError
     
     def watch(self, job_id: int):
-        self.queue.append(job_id)
-        if self.is_monitor:
-            self.monitor.watch(job_id)
+        pass
+
+    def monitor(self, job_id:int):
+        pass
 
 
 
@@ -116,43 +110,61 @@ class SlurmAdapter(SubmitAdapter):
         memory_max: int | None = None,
         run_time_max: str | int | None = None,
         work_dir: Path | str | None = None,
+        account: str | None = None,
         script_name: str|Path = "run_slurm.sh",
+        is_monitor: bool = False,
         **slurm_args,
     ):
 
         slurm_args["--job-name"] = job_name
-        slurm_args["--cpus-per-task"] = n_cores
+        slurm_args["--ntasks"] = n_cores
         if memory_max:
             slurm_args["--mem"] = memory_max
         if run_time_max:
             slurm_args["--time"] = run_time_max
         if work_dir:
             slurm_args["--chdir"] = work_dir
+        if account:
+            slurm_args["--account"] = account
 
         self._write_submit_script(Path(script_name), cmd, **slurm_args)
 
-        proc = subprocess.run(f"sbatch --parsable {script_name}", shell=True, capture_output=True)
-        job_id = int(1412)
+        try:
+            proc = subprocess.run(f"sbatch --parsable {script_name}", shell=True, capture_output=True, check=True)
+        except subprocess.CalledProcessError as e:
+            raise subprocess.CalledProcessError(f"Error submitting job: {e.stderr}")
+        job_id = int(proc.stdout)
 
-        self.watch(job_id)
+        if is_monitor:
+            self.watch(job_id)
 
         return job_id
+    
+    def watch(self, job_id:int):
+        info = self.query(job_id)
+        while info:
+            info = self.query(job_id)
+            print(f"Job {job_id}")
+            sleep(10)
 
     def _write_submit_script(self, script_path: Path, cmd: list[str], **args):
         # assert script_path.exists(), f"Script path {script_path} does not exist."
         with open(script_path, "w") as f:
             f.write("#!/bin/bash\n")
             for key, value in args.items():
-                f.write(f"#SBATCH {key} {value}\n")
+                f.write(f"#SBATCH {key}={value}\n")
             f.write("\n")
             f.write("\n".join(cmd))
             f.write("\n")
 
     def query(self, job_id: int):
         proc = subprocess.run(f"squeue -j {job_id}", shell=True, check=True, capture_output=True)
-        info = proc.stdout.split("\n")
+        info = proc.stdout.decode('utf-8').split("\n")
         header = info[0]
-        info_dict = {k: v for k, v in zip(header.split(), info[1].split())}
+        if len(info) > 2:
+            info_dict = {k: v for k, v in zip(header.split(), info[1].split())}
+        else:
+            info_dict = {}
         return info_dict
 
     def remote_submit(self):
@@ -183,10 +195,18 @@ class Submitor:
         script_name: str|Path|None = "run_slurm.sh",
         uploads: list[Path] | None = None,
         downloads: list[Path] | None = None,
+        is_monitor: bool = False,
         **slurm_args,
     ):
         job_id = self._adapter.submit(
-            cmd, job_name, n_cores, memory_max, run_time_max, script_name, **slurm_args
+            cmd=cmd,
+            job_name=job_name,
+            n_cores=n_cores,
+            memory_max=memory_max,
+            run_time_max=run_time_max,
+            script_name=script_name,
+            is_monitor=is_monitor,
+            **slurm_args
         )
 
         return job_id
@@ -200,7 +220,13 @@ class Submitor:
 
 
 def submit(cluster_name: str, cluster_type: str):
-    """Decorator to run the result of a function as a command line command."""
+    """submit a task to a cluster using the specified cluster type.
+
+    Args:
+        cluster_name (str): a name representing a cluster
+        cluster_type (str): a type of cluster
+
+    """
     submitor = Submitor(cluster_name, cluster_type)
 
     def decorator(func):
@@ -215,9 +241,9 @@ def submit(cluster_name: str, cluster_type: str):
             arguments: dict = next(generator)
             is_remote = arguments.pop("is_remote", False)
             if is_remote:
-                # submitor = Submitor.remote_submit()
-                pass
+                raise NotImplementedError("Remote submission is not implemented.")
             else:
+                print(f'### Submitting job to {cluster_name} cluster ###')
                 job_id = submitor.submit(**arguments)
             
             try:
