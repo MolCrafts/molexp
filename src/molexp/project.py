@@ -7,33 +7,12 @@ from hamilton.execution import executors
 
 import os
 from pathlib import Path
+from functools import partial
 
 from .param import Param, ParamList
 from hamilton import settings
-
-
-def execute_exp(
-    name: str, root: str, param: Param, materilizers: list, config: dict, modules: tuple
-) -> None:
-    tracker_hook = h_experiments.ExperimentTracker(
-        experiment_name=name,
-        base_directory=root,
-    )
-    execution_manager = DefaultExecutionManager(
-        executors.SynchronousLocalTaskExecutor(),
-        executors.MultiThreadingExecutor(20),
-    )
-    dr = (
-        driver.Builder()
-        .with_modules(*modules)
-        .enable_dynamic_execution(allow_experimental_mode=True)
-        .with_execution_manager(execution_manager)
-        .with_config(config)
-        .with_adapters(tracker_hook)
-        .build()
-    )
-    dr.materialize(*materilizers, inputs={"param": param})
-
+from hamilton.htypes import Parallelizable
+from pprint import pprint as print
 
 class Project:
 
@@ -71,21 +50,42 @@ class Project:
         )
         os.chdir(self.root)
 
-    def execute(self, param_list: ParamList, materilizers: list | None = None, *modules: list):
+    def execute(self, param_list: ParamList, materializers:list, *modules: list):
 
         execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(20),
         )
 
-        from molexp import project
+        parameters = {param.name: {'param': value(param)} for param in param_list}
+        for key in parameters:
+            parameters[key].update({'name': value(key)})
 
-        parameters = {param.name: {k: value(v) for k, v in param.items()} for param in param_list}
-        exp_names = {param.name: {"name": value(param.name)} for param in param_list}
-        parameters.update(exp_names)
-        project.execute_exp = resolve(
-            when=ResolveAt.CONFIG_AVAILABLE, decorate_with=lambda: parameterize(**parameters)
-        )(project.execute_exp)
+        @resolve(when=ResolveAt.CONFIG_AVAILABLE, decorate_with=lambda: parameterize(**parameters))
+        def execute_exp(
+            name: str, param: Param) -> str:
+            tracker_hook = h_experiments.ExperimentTracker(
+                experiment_name=name,
+                base_directory=self.root,
+            )
+            execution_manager = DefaultExecutionManager(
+                executors.SynchronousLocalTaskExecutor(),
+                executors.MultiThreadingExecutor(20),
+            )
+            dr = (
+                driver.Builder()
+                .with_modules(*modules)
+                .enable_dynamic_execution(allow_experimental_mode=True)
+                .with_execution_manager(execution_manager)
+                .with_config({})
+                .with_adapters(tracker_hook)
+                .build()
+            )
+            dr.materialize(*materializers, inputs={"param": param})
+            return tracker_hook.run_id
+
+        from molexp import project
+        project.execute_exp = execute_exp
 
         dr = (
             driver.Builder()
@@ -97,15 +97,7 @@ class Project:
         )
 
         dr.execute(
-            final_vars=list(exp_names.keys()),
-            inputs={
-                "root": str(self.root),
-                "materilizers": materilizers,
-                "config": {},
-                "modules": modules,
-                "param": param_list[0],
-                "name": param_list[0].name,
-            },
+            final_vars=[name for name in parameters],
         )
 
     def list(self):

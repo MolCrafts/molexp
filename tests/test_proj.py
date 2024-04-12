@@ -2,11 +2,14 @@ import molexp as me
 from pathlib import Path
 
 from hamilton.io.materialization import to
+from hamilton.function_modifiers import tag
 
+@tag(cache='pickle')
 def print_param(param:me.Param)->me.Param:
     print(param)
     return param
 
+@tag(cache='pickle')
 def calc_params(print_param:me.Param)->me.Param:
     print_param['c'] = print_param['a'] + print_param['b']
     return print_param
