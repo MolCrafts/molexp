@@ -7,7 +7,7 @@ class Param(dict):
     def name(self):
         return '_'.join(f"{k}x{v}" for k, v in self.items())
 
-class ParamList(list):
+class ParamList(list[Param]):
     pass
 
 class ParamSpace(dict):

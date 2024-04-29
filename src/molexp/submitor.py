@@ -113,27 +113,41 @@ class SlurmAdapter(SubmitAdapter):
         account: str | None = None,
         script_name: str|Path = "run_slurm.sh",
         is_monitor: bool = False,
-        **slurm_args,
+        test_only: bool = False,
+        **slurm_kwargs,
     ):
 
-        slurm_args["--job-name"] = job_name
-        slurm_args["--ntasks"] = n_cores
+        slurm_kwargs["--job-name"] = job_name
+        slurm_kwargs["--ntasks"] = n_cores
         if memory_max:
-            slurm_args["--mem"] = memory_max
+            slurm_kwargs["--mem"] = memory_max
         if run_time_max:
-            slurm_args["--time"] = run_time_max
+            slurm_kwargs["--time"] = run_time_max
         if work_dir:
-            slurm_args["--chdir"] = work_dir
+            slurm_kwargs["--chdir"] = work_dir
         if account:
-            slurm_args["--account"] = account
+            slurm_kwargs["--account"] = account
+        
+        submit_cmd = ["sbatch", "--parsable"]
+        
+        if test_only:
+            submit_cmd.append("--test-only")
 
-        self._write_submit_script(Path(script_name), cmd, **slurm_args)
+        submit_cmd.append(script_name)
+
+        self._write_submit_script(Path(script_name), cmd, **slurm_kwargs)
 
         try:
-            proc = subprocess.run(f"sbatch --parsable {script_name}", shell=True, capture_output=True, check=True)
+            proc = subprocess.run(submit_cmd, capture_output=True)
         except subprocess.CalledProcessError as e:
-            raise subprocess.CalledProcessError(f"Error submitting job: {e.stderr}")
-        job_id = int(proc.stdout)
+            raise e
+
+        if test_only:
+            # sbatch: Job 3676091 to start at 2024-04-26T20:02:12 using 256 processors on nodes nid001000 in partition main
+            print(proc.stderr)
+            job_id = int(proc.stderr.split()[2])
+        else:
+            job_id = int(proc.stdout)
 
         if is_monitor:
             self.watch(job_id)
@@ -196,7 +210,7 @@ class Submitor:
         uploads: list[Path] | None = None,
         downloads: list[Path] | None = None,
         is_monitor: bool = False,
-        **slurm_args,
+        **kwargs,
     ):
         job_id = self._adapter.submit(
             cmd=cmd,
@@ -206,7 +220,7 @@ class Submitor:
             run_time_max=run_time_max,
             script_name=script_name,
             is_monitor=is_monitor,
-            **slurm_args
+            **kwargs
         )
 
         return job_id

@@ -1,32 +1,37 @@
 from hamilton import driver
 from hamilton.experimental.h_cache import CachingGraphAdapter
-from hamilton.plugins import h_experiments
+
+# from hamilton.plugins import h_experiments
 from hamilton.function_modifiers import value, parameterize, resolve, ResolveAt
 from hamilton.execution.executors import DefaultExecutionManager
 from hamilton.execution import executors
 
 import os
+import json
 from pathlib import Path
 
 from .param import Param, ParamList
 from hamilton import settings
+from .tracker import ExperimentTracker, Experiment, ExperimentGroup
+
 
 class Project:
 
     def __init__(self, name: str, work_dir: str | Path = Path.cwd()):
 
         self.name = name
-        self.experiments = {}
         self._root = Path(work_dir).absolute() / name
         self.pre_exec_dir = Path(self.root) / ".pre_exec"
         if not self.pre_exec_dir.exists():
             self.pre_exec_dir.mkdir(parents=True, exist_ok=True)
 
+        self.tracker = ExperimentTracker(base_directory=self.root)
+
     @property
     def root(self):
         return self._root
 
-    def pre_execute(self, materilizers:list, *modules: list):
+    def pre_execute(self, materilizers: list, *modules: list):
 
         execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
@@ -44,46 +49,39 @@ class Project:
             .with_adapters(CachingGraphAdapter(str(cache)))
             .build()
         )
-        dr.materialize(
-            *materilizers
-        )
+        dr.materialize(*materilizers)
         os.chdir(self.root)
 
-    def execute(self, param_list: ParamList, materializers:list, *modules: list):
+    def execute(self, param_list: ParamList, materializers: list, *modules: list):
 
         execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(20),
         )
 
-        parameters = {param.name: {'param': value(param)} for param in param_list}
+        parameters = {param.name: {"param": value(param)} for param in param_list}
         for key in parameters:
-            parameters[key].update({'name': value(key)})
+            parameters[key].update({"name": value(key)})
 
         @resolve(when=ResolveAt.CONFIG_AVAILABLE, decorate_with=lambda: parameterize(**parameters))
-        def execute_exp(
-            name: str, param: Param) -> str:
-            tracker_hook = h_experiments.ExperimentTracker(
-                experiment_name=name,
-                base_directory=self.root,
-            )
-            execution_manager = DefaultExecutionManager(
-                executors.SynchronousLocalTaskExecutor(),
-                executors.MultiThreadingExecutor(20),
-            )
+        def execute_exp(name: str, param: Param) -> str:
+            # tracker_hook = ExperimentTracker(
+            #     experiment_name=name,
+            #     base_directory=self.root,
+            # )
+            run_id = self.tracker.init_experiment(name)
             dr = (
                 driver.Builder()
                 .with_modules(*modules)
                 .enable_dynamic_execution(allow_experimental_mode=True)
-                .with_execution_manager(execution_manager)
-                .with_config({})
-                .with_adapters(tracker_hook)
+                .with_adapters(self.tracker)
                 .build()
             )
-            dr.materialize(*materializers, inputs={"param": param})
-            return tracker_hook.run_id
+            dr.materialize(*materializers, inputs=param)
+            return run_id
 
         from molexp import project
+
         project.execute_exp = execute_exp
 
         dr = (
@@ -99,9 +97,14 @@ class Project:
             final_vars=[name for name in parameters],
         )
 
-    def list(self):
+    def list(self) -> ExperimentGroup:
         """list all experiment"""
-        return self.experiments
+        return ExperimentGroup(
+            [
+                Experiment.from_cache(json.loads(self.tracker.cache.read(exp_id)))
+                for exp_id in self.tracker.cache.keys()
+            ]
+        )
 
     def group(self, key: str):
         """group experiments by key, since we need to average the results
@@ -111,8 +114,3 @@ class Project:
             ave_results = np.mean([exp.get_something for exp in project.group('id')])
         """
         pass
-
-
-class Experiment:
-
-    pass

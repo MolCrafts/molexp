@@ -1,53 +1,19 @@
 import datetime
-import hashlib
-import inspect
 import json
 import logging
 import os
-import string
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable
 
-from hamilton import graph_types, lifecycle
+from hamilton import graph_types, lifecycle, base
 from hamilton.plugins.h_experiments.cache import JsonCache
 
 logger = logging.getLogger(__name__)
 
 
-def validate_string_input(user_input):
-    """Validate the experiment name will make a valid directory name"""
-    allowed = set(string.ascii_letters + string.digits + "_" + "-")
-    for char in user_input:
-        if char not in allowed:
-            raise ValueError(f"`{char}` from `{user_input}` is an invalid character.")
-
-
-def _get_default_input(node) -> Any:
-    """Get default input node value from originating function signature"""
-    param_name = node.name
-    origin_function = node.originating_functions[0]
-    param = inspect.signature(origin_function).parameters[param_name]
-    return None if param.default is inspect._empty else param.default
-
-
-def json_encoder(obj: Any):
-    """convert non JSON-serializable objects to a serializable format
-
-    set[T] -> list[T]
-    else -> dict[type: str, byte_hash: str]
-    """
-    if isinstance(obj, set):
-        serialized = list(obj)
-    else:
-        obj_hash = hashlib.sha256()
-        obj_hash.update(obj)
-        serialized = dict(
-            dtype=type(obj).__name__,
-            obj_hash=obj_hash.hexdigest(),
-        )
-    return serialized
+from .utils import validate_string_input, _get_default_input
 
 
 @dataclass
@@ -99,18 +65,21 @@ class ExperimentTracker(
     lifecycle.GraphExecutionHook,
     lifecycle.GraphConstructionHook,
 ):
-    def __init__(self, experiment_name: str, base_directory: str = "./experiments"):
-        validate_string_input(experiment_name)
+    def __init__(self, base_directory: str = "./experiments", is_exec_in_subdir:bool=True):
+        # validate_string_input(experiment_name)
 
-        self.experiment_name = experiment_name
+        # self.experiment_name = experiment_name
+        self.base_directory = base_directory
         self.cache = JsonCache(cache_path=base_directory)
-        self.run_id = str(uuid.uuid4())
+        # self.run_id = str(uuid.uuid4())
 
         self.init_directory = Path.cwd()
-        self.run_directory = (
-            Path(base_directory).resolve().joinpath(self.experiment_name, self.run_id)
-        )
-        self.run_directory.mkdir(exist_ok=True, parents=True)
+        # self.run_directory = (
+        #     Path(base_directory).resolve().joinpath(self.experiment_name, self.run_id)
+        # )
+        # self.run_directory.mkdir(exist_ok=True, parents=True)
+
+        self.is_exec_in_subdir = is_exec_in_subdir
 
         self.graph_hash: str = ""
         self.modules: set[str] = set()
@@ -118,6 +87,15 @@ class ExperimentTracker(
         self.inputs: list[NodeInput] = list()
         self.overrides: list[NodeOverride] = list()
         self.materializers: list[NodeMaterializer] = list()
+
+    def init_experiment(self, experiment_name: str):
+        validate_string_input(experiment_name)
+        self.experiment_name = experiment_name
+        self.run_id = str(uuid.uuid4())
+        self.run_directory = (
+            Path(self.base_directory).resolve().joinpath(self.experiment_name, self.run_id)
+        )
+        self.run_directory.mkdir(exist_ok=True, parents=True)
 
     def run_after_graph_construction(self, *, config: dict[str, Any], **kwargs):
         """Store the Driver config before creating the graph"""
@@ -133,6 +111,8 @@ class ExperimentTracker(
     ):
         """Store execution metadata: graph hash, inputs, overrides"""
         self.graph_hash = graph.version
+        if self.is_exec_in_subdir:
+            os.chdir(self.run_directory)
 
         for node in graph.nodes:
             if node.tags.get("module"):
@@ -153,7 +133,7 @@ class ExperimentTracker(
 
     def run_before_node_execution(self, *args, node_tags: dict, **kwargs):
         """Move to run directory before executing materializer"""
-        if node_tags.get("hamilton.data_saver") is True:
+        if node_tags.get("hamilton.data_saver") is True and self.is_exec_in_subdir is False:
             os.chdir(self.run_directory)  # before materialization
 
     def run_after_node_execution(
@@ -162,7 +142,7 @@ class ExperimentTracker(
         """Move back to init directory after executing materializer.
         Then, save materialization metadata
         """
-        if node_tags.get("hamilton.data_saver") is True:
+        if node_tags.get("hamilton.data_saver") is True and self.is_exec_in_subdir is False:
             if "path" in result:
                 path = result["path"]
             elif "file_metadata" in result:
@@ -200,3 +180,85 @@ class ExperimentTracker(
 
         run_json_string = json.dumps(run_data, default=str, sort_keys=True)
         self.cache.write(run_json_string, self.run_id)
+        if self.is_exec_in_subdir:
+            os.chdir(self.init_directory)
+
+from hamilton import driver, settings
+from hamilton.experimental.h_cache import CachingGraphAdapter
+
+# from hamilton.plugins import h_experiments
+from hamilton.function_modifiers import value, parameterize, resolve, ResolveAt
+from hamilton.execution.executors import DefaultExecutionManager
+from hamilton.execution import executors
+
+import os
+from pathlib import Path
+from .param import ParamList, Param
+
+
+class Experiment(dict):
+
+    @classmethod
+    def from_cache(cls, cache: dict):
+        return cls(cache)
+
+    @property
+    def param(self)->Param:
+        return Param({input_["name"]: input_["value"] for input_ in self["inputs"]})
+    
+    @property
+    def name(self):
+        return self["experiment"]
+    
+    def __repr__(self):
+        return f"Experiment({self.name})"
+
+class ExperimentGroup(list[Experiment]):
+
+    @property
+    def params(self)->ParamList:
+        param_list = ParamList()
+        for exp in self:
+            param_list.append(exp.param)
+
+        return param_list
+
+    def map_reduce(self, materializers: list, reducer:Callable=lambda x: x, *modules:list)->dict[Experiment, Any]:
+        root = Path.cwd()
+        execution_manager = DefaultExecutionManager(
+            executors.SynchronousLocalTaskExecutor(),
+            executors.MultiThreadingExecutor(20),
+        )
+
+        parameters = {exp.name: {"exp": value(exp)} for exp in self}
+
+        @resolve(when=ResolveAt.CONFIG_AVAILABLE, decorate_with=lambda: parameterize(**parameters))
+        def mapper(exp:Experiment) -> dict:
+            os.chdir(exp['run_dir'])
+            dr = (
+                driver.Builder()
+                .with_modules(*modules)
+                .build()
+            )
+            result = dr.materialize(*materializers, inputs=exp.param)
+            # result = dr.execute(inputs=exp.param, final_vars=["load_sin"])
+            return result     
+
+        from molexp import tracker
+
+        tracker.mapper = mapper
+        tracker.reducer = reducer
+
+        dr = (
+            driver.Builder()
+            .with_modules(tracker)
+            .enable_dynamic_execution(allow_experimental_mode=True)
+            .with_execution_manager(execution_manager)
+            .with_config({settings.ENABLE_POWER_USER_MODE: True})
+            .build()
+        )
+        os.chdir(root)
+        results = dr.execute(
+                final_vars=[name for name in parameters],
+            )
+        return reducer(results)
