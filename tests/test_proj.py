@@ -67,6 +67,7 @@ class TestProject:
             )
         ]
         def reducer(mapper:dict)->np.ndarray:
+            print(mapper)
             results = {}
             for exp_name, mat_result in mapper.items():
                 results[exp_name] = np.load(mat_result[0]['m_load_sin']['file_metadata']['path'], allow_pickle=True)

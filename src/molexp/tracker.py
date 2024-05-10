@@ -184,12 +184,12 @@ class ExperimentTracker(
             os.chdir(self.init_directory)
 
 from hamilton import driver, settings
-from hamilton.experimental.h_cache import CachingGraphAdapter
 
 # from hamilton.plugins import h_experiments
-from hamilton.function_modifiers import value, parameterize, resolve, ResolveAt
+from hamilton.function_modifiers import value, parameterize_extract_columns, ParameterizedExtract, resolve, ResolveAt
 from hamilton.execution.executors import DefaultExecutionManager
 from hamilton.execution import executors
+from hamilton.io.materialization import to
 
 import os
 from pathlib import Path
@@ -232,7 +232,7 @@ class ExperimentGroup(list[Experiment]):
 
         parameters = {exp.name: {"exp": value(exp)} for exp in self}
 
-        @resolve(when=ResolveAt.CONFIG_AVAILABLE, decorate_with=lambda: parameterize(**parameters))
+        @resolve(when=ResolveAt.CONFIG_AVAILABLE, decorate_with=lambda: parameterize_extract_columns(*[ParameterizedExtract(tuple(exp.name), {"exp": value(exp)}) for exp in self]))
         def mapper(exp:Experiment) -> dict:
             os.chdir(exp['run_dir'])
             dr = (
@@ -247,18 +247,24 @@ class ExperimentGroup(list[Experiment]):
         from molexp import tracker
 
         tracker.mapper = mapper
-        tracker.reducer = reducer
+        # tracker.reducer = resolve(when=ResolveAt.CONFIG_AVAILABLE, decorate_with=lambda: parameterize(**parameters))(reducer)
 
         dr = (
             driver.Builder()
             .with_modules(tracker)
             .enable_dynamic_execution(allow_experimental_mode=True)
             .with_execution_manager(execution_manager)
+            .with_adapter(base.SimplePythonGraphAdapter(base.DictResult()))
             .with_config({settings.ENABLE_POWER_USER_MODE: True})
             .build()
         )
         os.chdir(root)
         results = dr.execute(
                 final_vars=[name for name in parameters],
+                    # to.pickle(
+                    #     id='m_reducer',
+                    #     dependencies=['reducer'],
+                    #     path='./reduce.pkl'
+                    # )
             )
-        return reducer(results)
+        return results
