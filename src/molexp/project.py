@@ -1,11 +1,12 @@
 # from functools import partial
 from hamilton import driver
+from hamilton.execution.grouping import TaskImplementation
 
 # from hamilton.experimental.h_cache import CachingGraphAdapter
 
 from hamilton.plugins import h_experiments
 from hamilton.function_modifiers import value, parameterize, resolve, ResolveAt
-from hamilton.execution.executors import DefaultExecutionManager
+from hamilton.execution.executors import DefaultExecutionManager, TaskExecutor
 from hamilton.execution import executors
 
 # import os
@@ -46,6 +47,22 @@ def materialize_exp(param: Param, modules: list, materializers: list, root_dir: 
     return tracker.run_id
 
 
+class AllNodesRemoteExecutionManager(DefaultExecutionManager):
+    def get_executor_for_task(self, task: TaskImplementation) -> TaskExecutor:
+        """Simple implementation that returns the local executor for single task executions,
+        :param task: Task to get executor for
+        :return: A local task if this is a "single-node" task, a remote task otherwise
+        """
+        is_single_node_task = len(task.nodes) == 1
+        if not is_single_node_task:
+            raise ValueError("Only single node tasks supported")
+        return self.remote_executor
+        # (node,) = task.nodes
+        # if "cmdline" in node.tags:  # hard coded for now
+        #     return self.remote_executor
+        # return self.local_executor
+
+
 class Project:
     def __init__(self, name: str, work_dir: str | Path = Path.cwd()):
         self.name = name
@@ -72,9 +89,9 @@ class Project:
 
         # project.materialize_exp = materialize_exp
 
-        execution_manager = DefaultExecutionManager(
+        execution_manager = AllNodesRemoteExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
-            executors.MultiProcessingExecutor(8),
+            executors.MultiThreadingExecutor(8),
         )
 
         dr = (
