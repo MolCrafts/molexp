@@ -49,9 +49,9 @@ def materialize_exp(param: Param, modules: list, materializers: list, root_dir: 
 
 class AllNodesRemoteExecutionManager(DefaultExecutionManager):
     def get_executor_for_task(self, task: TaskImplementation) -> TaskExecutor:
-        """Simple implementation that returns the local executor for single task executions,
+        """Simple implementation that returns the remote executor for all executions.
         :param task: Task to get executor for
-        :return: A local task if this is a "single-node" task, a remote task otherwise
+        :return: Remote executor for all if applicable
         """
         is_single_node_task = len(task.nodes) == 1
         if not is_single_node_task:
