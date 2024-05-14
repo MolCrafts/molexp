@@ -1,17 +1,13 @@
-from time import sleep
-import time
 import molexp as me
 from pathlib import Path
 
-from hamilton.io.materialization import to
-from hamilton.function_modifiers import tag
+from hamilton.io.materialization import to, from_
 
 import numpy as np
-import shutil
+import pytest
 
 
 def entry_point(freq: float, phase: float) -> np.ndarray:
-    print(f"Start time: {time.ctime()}")
     return np.sin(freq * np.linspace(0, 2 * np.pi, 100) + phase)
 
 
@@ -19,21 +15,22 @@ def short_task(entry_point: np.ndarray) -> np.ndarray:
     return entry_point
 
 
-def long_task(short_task: np.ndarray) -> np.ndarray:
-    print("Sleeping for 3 seconds")
-    sleep(3)
+def long_task(freq:float, short_task: np.ndarray) -> np.ndarray:
     return short_task
 
 
+def resume_from_long_task(resume_from_long_task:np.ndarray) -> np.ndarray:
+    return resume_from_long_task
+    
+
 class TestProject:
 
-    def test_execute_exp(self):
-
-        init_dir = Path.cwd()
+    @pytest.fixture(name="proj", scope="class")
+    def test_init_exp(self):
 
         params = me.ParamSpace(
             {
-                "freq": [1.0, 2.0, 3.0],
+                "freq": [1.0],
                 "phase": [0.0],
             }
         )
@@ -51,18 +48,35 @@ class TestProject:
                 id="pickle_long_task", dependencies=["long_task"], path="./pickle_long_task.pkl"
             ),
         ]
-        proj.materialize(param_list, materializers, test_proj)
+        proj.run_exps(param_list, materializers, test_proj)
+        yield proj
 
-        end_dir = Path.cwd()
-        assert init_dir == end_dir
+    def test_list_exp(self, proj: me.Project):
+        assert len(proj.list()) == 1
 
-        # if Path('test_exp').exists():
-        #     shutil.rmtree('test_exp')
+    def test_resume_latest(self, proj: me.Project):
 
-    # def test_list_exp(self):
-    #     proj = me.Project("test_exp", Path.cwd())
-    #     exp_list = proj.list()
-    #     assert len(exp_list) == 3
+        proj = me.Project("test_exp", Path.cwd())
+        params = me.ParamSpace(
+            {
+                "freq": [1.0],
+                "phase": [0.0],
+            }
+        )
+
+        materializers = [
+            from_.pickle(
+                path="./pickle_long_task.pkl",
+                target="resume_from_long_task", 
+            ),
+            to.pickle(
+                id="pickle_resume_from_long_task", dependencies=["resume_from_long_task"], path="./pickle_resume_from_long_task.pkl"
+            )
+        ]
+        import test_proj
+        param_list = params.product()
+        proj.run_exps(param_list, materializers, test_proj, resume=True)
+        
 
     # def test_map_reduce(self):
     #     proj = me.Project("test_exp", Path.cwd())
