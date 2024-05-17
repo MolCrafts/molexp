@@ -38,7 +38,7 @@ class TestProject:
         param_list = params.product()
 
         proj = me.Project("test_exp", Path.cwd())
-        import test_proj
+        import test_parallel_proj
 
         materializers = [
             to.pickle(
@@ -48,7 +48,7 @@ class TestProject:
                 id="pickle_long_task", dependencies=["long_task"], path="./pickle_long_task.pkl"
             ),
         ]
-        proj.run_exps(param_list, materializers, test_proj)
+        proj.run_exps(param_list, materializers, test_parallel_proj)
         yield proj
 
     def test_list_exp(self, proj: me.Project):
@@ -73,9 +73,9 @@ class TestProject:
                 id="pickle_resume_from_long_task", dependencies=["resume_from_long_task"], path="./pickle_resume_from_long_task.pkl"
             )
         ]
-        import test_proj
+        import tests.test_parallel_proj as test_parallel_proj
         param_list = params.product()
-        proj.run_exps(param_list, materializers, test_proj, resume=True)
+        proj.run_exps(param_list, materializers, test_parallel_proj, resume=True)
         
 
     # def test_map_reduce(self):

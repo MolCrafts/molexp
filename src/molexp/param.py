@@ -1,12 +1,13 @@
+import uuid
+from typing import Any
 from itertools import product
-
 
 class Param(dict):
 
-    @property
-    def name(self):
-        raw = "_".join(f"{k}x{v}" for k, v in self.items())
-        return raw.replace(".", "-")
+    def __init__(self, params:dict[str, Any], alias:str=str(uuid.uuid4()), description:str=""):
+        super().__init__(params)
+        self.alias = alias
+        self.description = description
 
 class ParamList(list[Param]):
     pass

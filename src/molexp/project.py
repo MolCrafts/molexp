@@ -4,7 +4,8 @@ from hamilton.execution.grouping import TaskImplementation
 
 # from hamilton.experimental.h_cache import CachingGraphAdapter
 
-from hamilton.plugins import h_experiments
+# from hamilton.plugins import h_experiments
+from .experiment import ExperimentTracker, ExpInfo
 from hamilton.function_modifiers import value, parameterize, resolve, ResolveAt
 from hamilton.execution.executors import DefaultExecutionManager, TaskExecutor
 from hamilton.execution import executors
@@ -18,20 +19,8 @@ from pathlib import Path
 from .param import Param, ParamList
 from hamilton import settings
 from datetime import datetime
-
-# ERROR: can not put parameterize function here,
-#        it will cause "can not get lifecycle_name" error in NodeTransformLifecycle.__call__
-# def materialize_exp(param: Param, root: Path, modules: list, materializers: list) -> str:
-#     tracker = ExperimentTracker(param.name, root)
-#     dr = (
-#         driver.Builder()
-#         .with_modules(*modules)
-#         .enable_dynamic_execution(allow_experimental_mode=True)
-#         .with_adapters(tracker)
-#         .build()
-#     )
-#     dr.materialize(*materializers, inputs=param)
-#     return tracker.run_id
+from .cache import CsvCache
+from typing import Callable
 
 
 @resolve(
@@ -40,7 +29,7 @@ from datetime import datetime
 def materialize_exp(
     param: Param, modules: list, materializers: list, root_dir: str, resume_path: Path | None
 ) -> str:
-    tracker = h_experiments.ExperimentTracker(param.name, root_dir)
+    tracker = ExperimentTracker(param.name, root_dir)
     if resume_path:
         # soft link all files in resume_path to tracker.run_directory
         for file in Path(resume_path).iterdir():
@@ -75,16 +64,17 @@ class AllNodesRemoteExecutionManager(DefaultExecutionManager):
 
 
 class Project:
-    def __init__(self, name: str, work_dir: str | Path = Path.cwd()):
+    def __init__(self, name: str, work_dir: str | Path = Path.cwd(), header: dict[str, str] = {}):
         self.name = name
         self._root = Path(work_dir).absolute() / name
-        # (Path(work_dir) / name).mkdir()
         self._root.mkdir(exist_ok=True)
 
         self.execution_manager = AllNodesRemoteExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(8),
         )
+        self.header = header
+        self.variable_cache = CsvCache(self.root, ".metadata.csv")
 
     @property
     def root(self) -> Path:
@@ -135,7 +125,6 @@ class Project:
                 for exp in exps:
                     if exp["run_id"].startswith(res):
                         param["resume_path"] = exp["run_dir"]
-            
 
         from molexp import project
 
@@ -153,24 +142,43 @@ class Project:
             final_vars=[name for name in config["parameters"]],
         )
 
-    def run_exp(self, param: Param, materializers: list, *modules: tuple):
+    def run_exp(self, param: Param, materializers: list, /, *modules: tuple, resume_config: dict = {}):
 
-        exp_path = self.root / param.name
-        exp_path.mkdir(parents=True, exist_ok=True)
-        param.update({"work_dir": exp_path})
+        tracker = ExperimentTracker(param.alias, self.root)
+
+        # parse resume config
+        if resume_config:
+            resume_from = resume_config.get("path")
+            if isinstance(resume_from, (Path, str)):
+                resume_from = Path(resume_from)
+                assert resume_from.exists(), FileNotFoundError(f"{resume_from} does not exist.")
+                if resume_from.is_dir():
+                    for file in resume_from.iterdir():
+                        (tracker.run_directory / file.name).symlink_to(file)
+                else:
+                    tracker.run_directory.symlink_to(resume_from)
+            elif isinstance(resume_from, list):
+                for file in resume_from:
+                    (tracker.run_directory / file.name).symlink_to(file)
+
         dr = (
             driver.Builder()
             .with_modules(*modules)
             .enable_dynamic_execution(allow_experimental_mode=True)
             .with_execution_manager(self.execution_manager)
+            .with_adapter(tracker)
             .build()
         )
 
         dr.materialize(*materializers, inputs=param)
 
+        variable = self.header.copy()
+        variable.update(param)
+        self.variable_cache.write_dict(variable)
+
         return
 
-    def list(self, verbose: bool = False, console: bool = False) -> list[dict]:
+    def ls(self, verbose: bool = False, console: bool = False) -> list[dict]:
 
         table = Table(title="Experiments")
         table.add_column("Name")
@@ -203,3 +211,18 @@ class Project:
             console.print(table)
 
         return exp_list
+
+    def get_experiments(self) -> list[ExpInfo]:
+
+        with dbm.open(str(self.root / "json_cache"), "r") as db:
+            run_data_list = [json.loads(db[key]) for key in db.keys()]
+
+        exp_list = []
+        for run_data in run_data_list:
+            exp_list.append(ExpInfo(run_data, None))
+
+    def query_experiments(self, filter: Callable) -> list[ExpInfo]:
+
+        exp_list = self.get_experiments()
+        candidates = list(filter(filter, exp_list))
+        return candidates
