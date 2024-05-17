@@ -21,7 +21,6 @@ from hamilton import settings
 from datetime import datetime
 from .cache import CsvCache
 from typing import Callable
-import itertools
 
 
 @resolve(
@@ -226,5 +225,5 @@ class Project:
     def query_experiments(self, filter_fn: Callable) -> list[ExpInfo]:
 
         exp_list = self.get_experiments()
-        candidates = list(filter(filter_fn, exp_list))
+        candidates = sorted(filter(filter_fn, exp_list), key=lambda exp_info: datetime.fromisoformat(exp_info.run_data['date_completed']))
         return candidates
