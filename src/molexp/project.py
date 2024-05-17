@@ -21,6 +21,7 @@ from hamilton import settings
 from datetime import datetime
 from .cache import CsvCache
 from typing import Callable
+import itertools
 
 
 @resolve(
@@ -142,7 +143,7 @@ class Project:
             final_vars=[name for name in config["parameters"]],
         )
 
-    def run_exp(self, param: Param, materializers: list, /, *modules: tuple, resume_config: dict = {}):
+    def run_exp(self, param: Param, materializers: list, /, *modules: tuple, resume_config: dict = {}, additional_vars=[]):
 
         tracker = ExperimentTracker(param.alias, self.root)
 
@@ -170,7 +171,7 @@ class Project:
             .build()
         )
 
-        dr.materialize(*materializers, inputs=param)
+        dr.materialize(*materializers, inputs=param, additional_vars=additional_vars)
 
         variable = self.header.copy()
         variable.update(param)
@@ -220,9 +221,10 @@ class Project:
         exp_list = []
         for run_data in run_data_list:
             exp_list.append(ExpInfo(run_data, None))
+        return exp_list
 
-    def query_experiments(self, filter: Callable) -> list[ExpInfo]:
+    def query_experiments(self, filter_fn: Callable) -> list[ExpInfo]:
 
         exp_list = self.get_experiments()
-        candidates = list(filter(filter, exp_list))
+        candidates = list(filter(filter_fn, exp_list))
         return candidates
