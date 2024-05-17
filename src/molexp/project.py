@@ -142,7 +142,15 @@ class Project:
             final_vars=[name for name in config["parameters"]],
         )
 
-    def run_exp(self, param: Param, materializers: list, /, *modules: tuple, resume_config: dict = {}, additional_vars=[]):
+    def run_exp(
+        self,
+        param: Param,
+        materializers: list,
+        /,
+        *modules: tuple,
+        resume_config: dict = {},
+        additional_vars=[],
+    ):
 
         tracker = ExperimentTracker(param.alias, self.root)
 
@@ -225,5 +233,8 @@ class Project:
     def query_experiments(self, filter_fn: Callable) -> list[ExpInfo]:
 
         exp_list = self.get_experiments()
-        candidates = sorted(filter(filter_fn, exp_list), key=lambda exp_info: datetime.fromisoformat(exp_info.run_data['date_completed']))
+        candidates = sorted(
+            filter(filter_fn, exp_list),
+            key=lambda exp_info: datetime.fromisoformat(exp_info.run_data["date_completed"]),
+        )
         return candidates

@@ -155,6 +155,9 @@ class ExperimentTracker(
         """Move to run directory before executing materializer"""
         if node_tags.get("hamilton.data_saver") is True:
             os.chdir(self.run_directory)  # before materialization
+        
+        if node_tags.get("cd_run_dir") is True:
+            os.chdir(self.run_directory)
 
     def run_after_node_execution(
         self, *, node_name: str, node_tags: dict, node_kwargs: dict, result: Any, **kwargs
@@ -182,9 +185,11 @@ class ExperimentTracker(
             )
             os.chdir(self.init_directory)  # after materialization
 
+        if node_tags.get("cd_run_dir") is True:
+            os.chdir(self.init_directory)
+
     def run_after_graph_execution(self, *, success: bool, **kwargs):
         """Encode run metadata as JSON and store in cache"""
-        print('run_after_graph_execution')
         run_data = dict(
             experiment=self.experiment_name,
             run_id=self.run_id,
@@ -201,11 +206,11 @@ class ExperimentTracker(
         os.chdir(self.init_directory)
         run_json_string = json.dumps(run_data, default=str, sort_keys=True)
         self.cache.write(run_json_string, self.run_id)
-        print(run_json_string)
+
 
 class ExpInfo:
 
-    def __init__(self, run_data:dict, meta_data:dict):
+    def __init__(self, run_data: dict, meta_data: dict):
 
         self.run_data = run_data
         self.meta_data = meta_data
