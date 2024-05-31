@@ -4,10 +4,8 @@ from itertools import product
 
 class Param(dict):
 
-    def __init__(self, params:dict[str, Any], alias:str=str(uuid.uuid4()), description:str=""):
+    def __init__(self, params:dict[str, Any]):
         super().__init__(params)
-        self.alias = alias
-        self.description = description
 
 class ParamList(list[Param]):
     pass
