@@ -14,6 +14,8 @@ from typing import Any
 from molexp.experiment import Experiment
 from molexp.param import ParamList
 
+from hamilton.experimental import h_cache
+
 
 def map_func(
     tasks: ParamList|list[me.Task],
@@ -103,6 +105,17 @@ class Project:
         if self.tracker:
             trackers.append(self.tracker)
 
+        trackers.append(
+            h_cache.CachingGraphAdapter(experiment_tracker.work_dir / ".cache")
+        )
+        (experiment_tracker.work_dir / ".cache").mkdir(exist_ok=True, parents=True)
+
+        param.update({
+            'task_dir': task_tracker.work_dir,
+            'exp_dir': experiment_tracker.work_dir,
+            'proj_dir': self.root,
+        })
+
         dr = (
             driver.Builder()
             .with_modules(*modules)
@@ -111,8 +124,9 @@ class Project:
             .build()
         )
 
-        if not materializers or not additional_vars:
+        if not materializers and not additional_vars:
             additional_vars = dr.list_available_variables()
+        print(additional_vars)
         dr.materialize(*materializers, inputs=param, additional_vars=additional_vars)
 
         os.chdir(Path.cwd())
