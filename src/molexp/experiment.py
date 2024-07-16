@@ -31,6 +31,9 @@ class Task:
         self.config = config
         self.modules = modules
 
+    def __repr__(self):
+        return f"<Task: {self.name}>"
+
     def get_param(self):
         return self.param.copy()
 
@@ -66,6 +69,9 @@ class Experiment:
         self.tasks = Tasks()
 
         self._modules = []
+
+    def __repr__(self):
+        return f"<Experiment: {self.name}>"
 
     @property
     def modules(self):
@@ -186,7 +192,8 @@ class ExperimentTracker(
         self.work_dir = Path(work_dir).resolve().joinpath(name)
 
         self.meta: dict = {}
-        self.work_dir.mkdir(parents=True, exist_ok=True)
+        if not self.work_dir.exists():
+            self.work_dir.mkdir(parents=True, exist_ok=True)
 
     def run_before_graph_execution(
         self,
