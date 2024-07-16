@@ -1,57 +1,52 @@
 from types import ModuleType
 import molexp as me
-import os
-
-from hamilton import driver
 from hamilton_sdk import adapters
 from hamilton.execution.executors import DefaultExecutionManager
 from hamilton.execution import executors
-from hamilton.htypes import Parallelizable
+from hamilton import driver
+from hamilton.lifecycle import GraphAdapter
 
 from pathlib import Path
 from typing import Any
 
 from molexp.experiment import Experiment
-from molexp.param import ParamList
-
-from hamilton.experimental import h_cache
 
 
-def map_func(
-    tasks: ParamList|list[me.Task],
-    experiments: list[Experiment],
-    proj_dir: Path,
-    modules: tuple,
-    materializers:list=[],
-    additional_vars:list=[],
-) -> Parallelizable[Any]:
-    for task in tasks:
-        for experiment in experiments:
-            param = experiment.get_param()
-            param.update(task.get_param())
+# def map_func(
+#     tasks: ParamList|list[me.Task],
+#     experiments: list[Experiment],
+#     proj_dir: Path,
+#     modules: tuple,
+#     materializers:list=[],
+#     additional_vars:list=[],
+# ) -> Parallelizable[Any]:
+#     for task in tasks:
+#         for experiment in experiments:
+#             param = experiment.get_param()
+#             param.update(task.get_param())
 
-            experiment_tracker = experiment.get_tracker(proj_dir)
-            task_tracker = task.get_tracker(experiment_tracker.work_dir)
+#             experiment_tracker = experiment.get_tracker(proj_dir)
+#             task_tracker = task.get_tracker(experiment_tracker.work_dir)
 
-            config = task.get_config()
-            config.update(experiment.get_config())
+#             config = task.get_config()
+#             config.update(experiment.get_config())
 
-            trackers = [experiment_tracker, task_tracker]
-            dr = (
-                driver.Builder()
-                .with_modules(*modules)
-                .with_config(task.get_config())
-                .with_adapters(*trackers)
-                .build()
-            )
+#             trackers = [experiment_tracker, task_tracker]
+#             dr = (
+#                 driver.Builder()
+#                 .with_modules(*modules)
+#                 .with_config(task.get_config())
+#                 .with_adapters(*trackers)
+#                 .build()
+#             )
 
-            if not materializers or not additional_vars:
-                additional_vars = dr.list_available_variables()
-            yield dr.materialize(*materializers, inputs=param, additional_vars=additional_vars)
+#             if not materializers or not additional_vars:
+#                 additional_vars = dr.list_available_variables()
+#             yield dr.materialize(*materializers, inputs=param, additional_vars=additional_vars)
 
 
-def reduce_func(map_func: Parallelizable[Any]) -> Any:
-    pass
+# def reduce_func(map_func: Parallelizable[Any]) -> Any:
+#     pass
 
 
 class Project:
@@ -60,20 +55,19 @@ class Project:
         name: str,
         work_dir: str | Path = Path.cwd(),
         tags: dict = {},
-        header: dict[str, str] = {},
+        description: str = "",
         proj_id: int | None = None,
     ):
         self.name = name
-        self._root = Path(work_dir).absolute() / name
-        self._root.mkdir(exist_ok=True)
+        self._work_dir = Path(work_dir).absolute() / name
+        self._work_dir.mkdir(exist_ok=True)
+        self.description = description
 
         self.execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(8),
         )
-        self.header = header
-        self.experiments = []
-
+        self.experiments = me.experiment.Experiments()
         self.tracker = None
         if proj_id:
             assert me.Config.USER_NAME != "undefined", ValueError(
@@ -87,77 +81,133 @@ class Project:
             )
 
     @property
-    def root(self) -> Path:
-        return self._root
-
-    def run(self, task, experiment, *modules, materializers=[], additional_vars=[]):
-
-        param = experiment.get_param()
-        param.update(task.get_param())
-
-        experiment_tracker = experiment.get_tracker(self.root)
-        task_tracker = task.get_tracker(experiment_tracker.work_dir)
-
-        config = task.get_config()
-        config.update(experiment.get_config())
-
-        trackers = [task_tracker, experiment_tracker]
-        if self.tracker:
-            trackers.append(self.tracker)
-
-        trackers.append(
-            h_cache.CachingGraphAdapter(experiment_tracker.work_dir / ".cache")
+    def work_dir(self) -> Path:
+        return self._work_dir
+    
+    def def_exp(self, name:str, param:me.Param):
+        exp = Experiment(
+            name=name,
+            param=param,
         )
-        (experiment_tracker.work_dir / ".cache").mkdir(exist_ok=True, parents=True)
+        self.add_exp(exp)
+        return exp
+    
+    def add_exp(self, exp: Experiment):
+        self.experiments.add(exp)
 
-        param.update({
-            'task_dir': task_tracker.work_dir,
-            'exp_dir': experiment_tracker.work_dir,
-            'proj_dir': self.root,
-        })
+    def get_exp(self, name: str) -> Experiment:
+        return self.experiments.get_by_name(name)
+
+    def ls(self):
+        return self.experiments
+    
+    def _get_driver(self, modules: list[ModuleType], adapters: list[GraphAdapter]):
 
         dr = (
             driver.Builder()
             .with_modules(*modules)
-            .with_config(task.get_config())
-            .with_adapters(*trackers)
+            .with_adapters(*adapters)
             .build()
         )
-
-        if not materializers and not additional_vars:
-            additional_vars = dr.list_available_variables()
-        print(additional_vars)
-        dr.materialize(*materializers, inputs=param, additional_vars=additional_vars)
-
-        os.chdir(Path.cwd())
-
-    def batch_run(self, tasks, experiments, *modules, materializers=[], additional_vars=[]):
-
-        trackers = []
+        return dr
+    
+    def start_task(self, path: str, final_vars: list[str] = []):
+        
+        exp_name, task_name = path.split("/")
+        exp = self.experiments.get_by_name(exp_name)
+        task = exp.tasks.get_by_name(task_name)
+        exp_tracker = exp.get_tracker(self._work_dir)
+        task_tracker = task.get_tracker(exp_tracker.work_dir)
+        modules = []
+        modules.extend(exp.modules)
+        modules.extend(task.modules)
+        adapters = [exp_tracker, task_tracker]
         if self.tracker:
-            trackers.append(self.tracker)
-
-        import molexp.project
-        dr = (
-            driver.Builder()
-            .with_modules(molexp.project)
-            .with_config({})
-            .enable_dynamic_execution(allow_experimental_mode=True)
-            .with_adapters(self.tracker)
-            .build()
+            adapters.append(self.tracker)
+        dr = self._get_driver(
+            modules=modules,
+            adapters=[exp_tracker, task_tracker],
         )
+
+        if not final_vars:
+            final_vars = dr.list_available_variables()
+
+        params = exp.get_param()
+        params.update(task.get_param())
 
         dr.execute(
-            dr.list_available_variables(),
-            inputs={
-                "tasks": tasks,
-                "experiments": experiments,
-                "modules": modules,
-                "proj_dir": self.root,
-                "materializers": materializers,
-                "additional_vars": additional_vars,
-            },
+            final_vars=final_vars,
+            inputs=params
         )
+
+    # def run(self, task, experiment, *modules, materializers=[], additional_vars=[]):
+
+    #     param = experiment.get_param()
+    #     param.update(task.get_param())
+
+    #     experiment_tracker = experiment.get_tracker(self.work_dir)
+    #     task_tracker = task.get_tracker(experiment_tracker.work_dir)
+
+    #     config = task.get_config()
+    #     config.update(experiment.get_config())
+
+    #     trackers = [task_tracker, experiment_tracker]
+    #     if self.tracker:
+    #         trackers.append(self.tracker)
+
+    #     trackers.append(
+    #         h_cache.CachingGraphAdapter(experiment_tracker.work_dir / ".cache")
+    #     )
+    #     (experiment_tracker.work_dir / ".cache").mkdir(exist_ok=True, parents=True)
+
+    #     param.update({
+    #         'task_dir': task_tracker.work_dir,
+    #         'exp_dir': experiment_tracker.work_dir,
+    #         'proj_dir': self.work_dir,
+    #     })
+
+    #     dr = (
+    #         driver.Builder()
+    #         .with_modules(*modules)
+    #         .with_config(task.get_config())
+    #         .with_adapters(*trackers)
+    #         .build()
+    #     )
+
+    #     if not materializers and not additional_vars:
+    #         additional_vars = dr.list_available_variables()
+    #     print(additional_vars)
+    #     dr.materialize(*materializers, inputs=param, additional_vars=additional_vars)
+
+    #     os.chdir(Path.cwd())
+
+    # def batch_run(self, tasks, experiments, *modules, materializers=[], additional_vars=[]):
+
+    #     trackers = []
+    #     if self.tracker:
+    #         trackers.append(self.tracker)
+
+    #     import molexp.project
+    #     dr = (
+    #         driver.Builder()
+    #         .with_modules(molexp.project)
+    #         .with_config({})
+    #         .enable_dynamic_execution(allow_experimental_mode=True)
+    #         .with_adapters(self.tracker)
+    #         .build()
+    #     )
+
+    #     dr.execute(
+    #         dr.list_available_variables(),
+    #         inputs={
+    #             "tasks": tasks,
+    #             "experiments": experiments,
+    #             "modules": modules,
+    #             "proj_dir": self.work_dir,
+    #             "materializers": materializers,
+    #             "additional_vars": additional_vars,
+    #         },
+    #     )
 
     # def run_exp(
     #     self,
@@ -174,12 +224,12 @@ class Project:
     #     self.exp_tracker = ExperimentTracker(
     #         run_name=name,
     #         exp_name=param.name,
-    #         base_directory=self.root,
+    #         base_directory=self.work_dir,
     #     )
 
     #     config.update(
     #         {
-    #             "proj_dir": self._root,
+    #             "proj_dir": self._work_dir,
     #             "exp_dir": self.exp_tracker.run_directory,
     #         }
     #     )
@@ -214,7 +264,7 @@ class Project:
     #     table.add_column("Path")
 
     #     exp_list = []
-    #     with dbm.open(str(self.root / "json_cache"), "r") as db:
+    #     with dbm.open(str(self.work_dir / "json_cache"), "r") as db:
     #         for key in db.keys():
     #             values = []
     #             exp = json.loads(db[key])
@@ -239,7 +289,7 @@ class Project:
 
     # def get_experiments(self) -> list[ExpInfo]:
 
-    #     with dbm.open(str(self.root / "json_cache"), "r") as db:
+    #     with dbm.open(str(self.work_dir / "json_cache"), "r") as db:
     #         run_data_list = [json.loads(db[key]) for key in db.keys()]
 
     #     exp_list = []
