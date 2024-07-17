@@ -141,35 +141,35 @@ class Project:
             inputs=params
         )
 
-    def resume_task(self, name:str, param:me.Param, modules: list[ModuleType] = [], config:dict={}, from_task:str|None=None, from_files: list[str|Path]|None = None, final_vars: list[str] = []):
+    # def resume_task(self, name:str, param:me.Param, modules: list[ModuleType] = [], config:dict={}, from_task:str|None=None, from_files: list[str|Path]|None = None, final_vars: list[str] = []):
         
-        exp_name, task_name = name.split("/")
-        exp = self.experiments.get_by_name(exp_name)
-        task = exp.def_task(task_name, param, modules, config)
-        exp_tracker = exp.get_tracker(self._work_dir)
-        task_tracker = task.get_tracker(exp_tracker.work_dir)
+    #     exp_name, task_name = name.split("/")
+    #     exp = self.experiments.get_by_name(exp_name)
+    #     task = exp.def_task(task_name, param, modules, config)
+    #     exp_tracker = exp.get_tracker(self._work_dir)
+    #     task_tracker = task.get_tracker(exp_tracker.work_dir)
 
-        if (from_files is None and from_task is None) or (from_files and from_task):
-            raise ValueError("Either from_task or from_files should be provided")
-        if from_task:
-            exp_name, task_name = from_task.split("/")
-            exp = self.experiments.get_by_name(exp_name)
-            from_task_obj = exp.tasks.get_by_name(task_name)
-            exp_tracker = exp.get_tracker(self._work_dir)
-            from_task_tracker = from_task_obj.get_tracker(exp_tracker.work_dir)
-            from_task_path = from_task_tracker.work_dir
-            for file in from_task_path.iterdir():
-                to_path = task_tracker.work_dir / file.name
-                if to_path.exists():
-                    to_path.unlink()
-                to_path.symlink_to(file)
-        elif from_files:
+    #     if (from_files is None and from_task is None) or (from_files and from_task):
+    #         raise ValueError("Either from_task or from_files should be provided")
+    #     if from_task:
+    #         exp_name, task_name = from_task.split("/")
+    #         exp = self.experiments.get_by_name(exp_name)
+    #         from_task_obj = exp.tasks.get_by_name(task_name)
+    #         exp_tracker = exp.get_tracker(self._work_dir)
+    #         from_task_tracker = from_task_obj.get_tracker(exp_tracker.work_dir)
+    #         from_task_path = from_task_tracker.work_dir
+    #         for file in from_task_path.iterdir():
+    #             to_path = task_tracker.work_dir / file.name
+    #             if to_path.exists():
+    #                 to_path.unlink()
+    #             to_path.symlink_to(file)
+    #     elif from_files:
             
-            for file_path in from_files:
-                Path(file_path).symlink_to(task_tracker.work_dir / Path(file_path).name)
+    #         for file_path in from_files:
+    #             Path(file_path).symlink_to(task_tracker.work_dir / Path(file_path).name)
                 
 
-        self.start_task(name, final_vars)
+    #     self.start_task(name, final_vars)
         
 
     # def run(self, task, experiment, *modules, materializers=[], additional_vars=[]):

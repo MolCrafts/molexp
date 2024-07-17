@@ -43,6 +43,13 @@ class TestProject:
 
     #     proj.restart_task("test1")
 
-    def test_resume_task(self, proj):
+    # def test_resume_task(self, proj):
         
-        proj.resume_task("exp1/task2", me.Param(a='1', c=4.0), modules=[business_logic], config={}, from_task="exp1/task1")
+    #     proj.resume_task("exp1/task2", me.Param(a='1', c=4.0), modules=[business_logic], config={}, from_task="exp1/task1")
+
+    def test_resume_task_step_by_step(self, proj: me.Project):
+
+        exp1 = proj.get_exp("exp1")
+        exp1.resume_task(name='task3', param=me.Param(a='1', c=5.0), modules=[business_logic], config={}, from_files=['task1/*'])
+
+        proj.start_task("exp1/task3")

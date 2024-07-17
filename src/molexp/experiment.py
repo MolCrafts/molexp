@@ -1,15 +1,9 @@
 from pathlib import Path
-import datetime
-from dataclasses import dataclass, asdict
 from typing import Any, Dict, Optional
-import hashlib
-import inspect
-import json
 import logging
 import os
 from typing import Collection, List
 
-from copy import deepcopy
 from hamilton import graph_types, lifecycle
 
 import molexp as me
@@ -25,11 +19,13 @@ class Task:
         param: me.Param,
         modules: list,
         config: dict = {},
+        dependencies: list[str] = [],
     ):
         self.name = name
         self.param = param
         self.config = config
         self.modules = modules
+        self.dependencies = dependencies
 
     def __repr__(self):
         return f"<Task: {self.name}>"
@@ -41,12 +37,7 @@ class Task:
         return self.config
 
     def get_tracker(self, work_dir: str | Path = Path.cwd()):
-        return TaskTracker(
-            self.name,
-            self.param,
-            self.config,
-            work_dir,
-        )
+        return TaskTracker(self.name, self.param, self.config, work_dir, self.dependencies)
 
     def start(self):
         pass
@@ -101,6 +92,25 @@ class Experiment:
         self.tasks.add(task)
         return task
 
+    def resume_task(
+        self,
+        name: str,
+        param: me.Param,
+        modules: list,
+        config: dict = {},
+        from_files: list[str] | None = None,
+    ) -> Task:
+
+        task = Task(
+            name=name,
+            param=param,
+            modules=modules,
+            config=config,
+            dependencies=from_files,
+        )
+        self.tasks.add(task)
+        return task
+
     def ls(self):
         return self.tasks
 
@@ -134,17 +144,37 @@ class TaskTracker(
     # lifecycle.GraphExecutionHook,
     # lifecycle.GraphConstructionHook,
 ):
-    def __init__(self, name: str, param: me.Param, config: dict, work_dir: str | Path):
+    def __init__(
+        self,
+        name: str,
+        param: me.Param,
+        config: dict,
+        work_dir: str | Path,
+        dependencies: list[str],
+    ):
 
         self.name = name
         self.param = param
         self.config = config
+        self.dependencies = dependencies
 
         self.init_dir = Path(work_dir)
         self.work_dir = Path(work_dir).resolve().joinpath(name)
 
         self.meta: dict = {}
         self.work_dir.mkdir(parents=True, exist_ok=True)
+
+        for dep in dependencies:
+            task_name, file_name = dep.split('/')
+            task_path = self.init_dir / task_name
+            if not task_path.exists():
+                raise FileNotFoundError(f"Task {task_name} not found.")
+            
+            for file in task_path.glob(file_name):
+                if not file.exists():
+                    raise FileNotFoundError(f"File {file_name} not found in task {task_name}.")
+                file_link = self.work_dir / file.name
+                file_link.symlink_to(file)
 
     def run_before_node_execution(
         self,
