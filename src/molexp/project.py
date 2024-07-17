@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from molexp.experiment import Experiment
-import shutil
+import os
 
 
 # def map_func(
@@ -117,8 +117,8 @@ class Project:
         exp_name, task_name = path.split("/")
         exp = self.experiments.get_by_name(exp_name)
         task = exp.tasks.get_by_name(task_name)
-        exp_tracker = exp.get_tracker(self._work_dir)
-        task_tracker = task.get_tracker(exp_tracker.work_dir)
+        exp_tracker = exp.get_tracker(self._work_dir)  # inside proj path
+        task_tracker = task.get_tracker(exp_tracker.work_dir)  # inside exp path
         modules = []
         modules.extend(exp.modules)
         modules.extend(task.modules)

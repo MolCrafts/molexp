@@ -1,7 +1,9 @@
 import pytest
+from pathlib import Path
 
 import molexp as me
 import business_logic
+import os, shutil
 
 class TestProject:
 
@@ -14,6 +16,16 @@ class TestProject:
             tags=["test", "project"],
         )
         yield proj
+
+    @pytest.fixture(scope='class', autouse=True)
+    def delete_temp(self):
+        init_dir = Path.cwd()
+        yield
+        os.chdir(init_dir)
+        proj_path = Path('test_project')
+        assert proj_path.absolute().exists()
+        if proj_path.exists():
+            shutil.rmtree(proj_path)
 
     def test_def_exp(self, proj: me.Project):
 
