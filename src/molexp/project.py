@@ -5,6 +5,7 @@ from hamilton.execution.executors import DefaultExecutionManager
 from hamilton.execution import executors
 from hamilton import driver
 from hamilton.lifecycle import GraphAdapter
+from hamilton.experimental import h_cache
 
 from pathlib import Path
 from typing import Any
@@ -125,9 +126,15 @@ class Project:
         adapters = [exp_tracker, task_tracker]
         if self.tracker:
             adapters.append(self.tracker)
+
+        cache_dir = task_tracker.work_dir/'.cache'
+        cache_dir.mkdir(exist_ok=True)
+        cache_adapter = h_cache.CachingGraphAdapter(cache_dir)
+        adapters.append(cache_adapter)
+
         dr = self._get_driver(
             modules=modules,
-            adapters=[exp_tracker, task_tracker],
+            adapters=adapters,
         )
 
         if not final_vars:
@@ -136,7 +143,7 @@ class Project:
         params = exp.get_param()
         params.update(task.get_param())
 
-        dr.execute(
+        return dr.execute(
             final_vars=final_vars,
             inputs=params
         )

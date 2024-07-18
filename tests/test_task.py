@@ -9,7 +9,7 @@ class TestTask:
 
         task = me.Task(
             name = 'test_task',
-            param = me.param.random_param(),
+            param = me.param.random_param()
         )
         return task
     

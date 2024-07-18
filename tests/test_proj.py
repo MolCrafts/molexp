@@ -1,8 +1,9 @@
 import pytest
+from pytest_mock import MockerFixture
 from pathlib import Path
 
 import molexp as me
-import business_logic
+import logic
 import os, shutil
 
 class TestProject:
@@ -24,8 +25,8 @@ class TestProject:
         os.chdir(init_dir)
         proj_path = Path('test_project')
         assert proj_path.absolute().exists()
-        if proj_path.exists():
-            shutil.rmtree(proj_path)
+        # if proj_path.exists():
+        #     shutil.rmtree(proj_path)
 
     def test_def_exp(self, proj: me.Project):
 
@@ -47,9 +48,9 @@ class TestProject:
     def test_start_task(self, proj:me.Project):
 
         exp1 = proj.get_exp("exp1")
-        exp1.def_task(name="task1", param=me.Param(a='1', c=3.0), modules=[business_logic])
+        exp1.def_task(name="task1", param=me.Param(a='1', c=3.0), modules=[logic])
 
-        proj.start_task("exp1/task1")
+        proj.start_task("exp1/task1", final_vars=['manual_save_step'])
 
     # def test_restart_task(self, proj):
 
@@ -62,6 +63,23 @@ class TestProject:
     def test_resume_task_step_by_step(self, proj: me.Project):
 
         exp1 = proj.get_exp("exp1")
-        exp1.resume_task(name='task3', param=me.Param(a='1', c=5.0), modules=[business_logic], config={}, from_files=['task1/*'])
+        exp1.resume_task(name='task3', param=me.Param(a='1', c=5.0), modules=[logic], config={}, from_files=['task1/*'])
 
-        proj.start_task("exp1/task3")
+        proj.start_task("exp1/task3", final_vars=['manual_save_step'])
+
+    def test_caching(self, proj: me.Project, mocker: MockerFixture):
+
+        exp1 = proj.get_exp("exp1")
+        exp1.def_task(name='task2', param=me.Param(a='1', c=4.0), modules=[logic])
+
+        result = proj.start_task("exp1/task2", final_vars=['workload_step'])
+        print(result)
+        assert result['workload_step']['call_time'] == 1
+        result = proj.start_task("exp1/task2", final_vars=['workload_step'])
+        assert result['workload_step']['call_time'] == 1
+        
+        # test recompute
+        # task = exp1.get_task('task2')
+        # task.param['a'] = '2'
+        # result = proj.start_task("exp1/task2", final_vars=['workload_step'])
+        # assert result['workload_step']['call_time'] == 2

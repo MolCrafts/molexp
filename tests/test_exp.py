@@ -1,7 +1,7 @@
 import pytest
 
 import molexp as me
-
+import logic
 
 class TestExperiment:
 
@@ -13,15 +13,15 @@ class TestExperiment:
 
     def test_def_task(self, exp):
 
-        exp.def_task(name="test1", param=me.param.random_param())
+        exp.def_task(name="test1", param=me.param.random_param(), modules=[logic])
 
-        exp.def_task(name="test2", param=me.param.random_param())
+        exp.def_task(name="test2", param=me.param.random_param(), modules=[logic])
 
-        exp.def_task(name="test3", param=me.param.random_param())
+        exp.def_task(name="test3", param=me.param.random_param(), modules=[logic])
 
     def test_list_task(self, exp):
 
-        task_list = exp.list_task()
+        task_list = exp.ls()
         assert len(task_list) == 3
 
     # def test_restart(self, exp):

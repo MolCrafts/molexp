@@ -1,50 +1,12 @@
 from pathlib import Path
-from typing import Any, Dict, Optional
-import logging
+from typing import Any, Dict
 import os
 from typing import Collection, List
 
 from hamilton import graph_types, lifecycle
 
 import molexp as me
-
-logger = logging.getLogger(__name__)
-
-
-class Task:
-
-    def __init__(
-        self,
-        name: str,
-        param: me.Param,
-        modules: list,
-        config: dict = {},
-        dependencies: list[str] = [],
-    ):
-        self.name = name
-        self.param = param
-        self.config = config
-        self.modules = modules
-        self.dependencies = dependencies
-
-    def __repr__(self):
-        return f"<Task: {self.name}>"
-
-    def get_param(self):
-        return self.param.copy()
-
-    def get_config(self):
-        return self.config
-
-    def get_tracker(self, work_dir: str | Path = Path.cwd()):
-        return TaskTracker(self.name, self.param, self.config, work_dir, self.dependencies)
-
-    def start(self):
-        pass
-
-    def restart(self, param: me.Param | None = None):
-        pass
-
+from molexp.task import Task, Tasks
 
 class Experiment:
 
@@ -81,6 +43,9 @@ class Experiment:
             self.config,
             work_dir,
         )
+
+    def get_task(self, name: str) -> Task:
+        return self.tasks.get_by_name(name)
 
     def def_task(self, name: str, param: me.Param, modules: list, config: dict = {}) -> Task:
         task = Task(
@@ -125,86 +90,6 @@ class Experiments(list):
 
     def add(self, exp: Experiment):
         self.append(exp)
-
-
-class Tasks(list):
-
-    def get_by_name(self, name: str) -> Task:
-        for task in self:
-            if task.name == name:
-                return task
-        return None
-
-    def add(self, task: Task):
-        self.append(task)
-
-
-class TaskTracker(
-    lifecycle.NodeExecutionHook,
-    # lifecycle.GraphExecutionHook,
-    # lifecycle.GraphConstructionHook,
-):
-    def __init__(
-        self,
-        name: str,
-        param: me.Param,
-        config: dict,
-        work_dir: str | Path,
-        dependencies: list[str],
-    ):
-
-        self.name = name
-        self.param = param
-        self.config = config
-        self.dependencies = dependencies
-
-        self.init_dir = Path(work_dir)
-        self.work_dir = Path(work_dir).resolve().joinpath(name)
-
-        self.meta: dict = {}
-        self.work_dir.mkdir(parents=True, exist_ok=True)
-
-        for dep in dependencies:
-            task_name, file_name = dep.split('/')
-            task_path = self.init_dir / task_name
-            if not task_path.exists():
-                raise FileNotFoundError(f"Task {task_name} not found.")
-            
-            for file in task_path.glob(file_name):
-                if not file.exists():
-                    raise FileNotFoundError(f"File {file_name} not found in task {task_name}.")
-                file_link = self.work_dir / file.name
-                file_link.symlink_to(file)
-
-    def run_before_node_execution(
-        self,
-        *,
-        node_name: str,
-        node_tags: Dict[str, Any],
-        node_kwargs: Dict[str, Any],
-        node_return_type: type,
-        task_id: Optional[str],
-        run_id: str,
-        node_input_types: Dict[str, Any],
-        **future_kwargs: Any,
-    ):
-        os.chdir(self.work_dir)
-
-    def run_after_node_execution(
-        self,
-        *,
-        node_name: str,
-        node_tags: Dict[str, Any],
-        node_kwargs: Dict[str, Any],
-        node_return_type: type,
-        result: Any,
-        error: Optional[Exception],
-        success: bool,
-        task_id: Optional[str],
-        run_id: str,
-        **future_kwargs: Any,
-    ):
-        os.chdir(self.init_dir)
 
 
 class ExperimentTracker(
