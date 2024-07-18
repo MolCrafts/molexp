@@ -1,17 +1,21 @@
-import os
+import warnings
 from pathlib import Path
 from types import ModuleType
-from typing import Any
 
 from hamilton import driver
 from hamilton.execution import executors
 from hamilton.execution.executors import DefaultExecutionManager
 from hamilton.lifecycle import GraphAdapter
+
 try:
     from hamilton_sdk import adapters
+
     SDK_INSTALL = True
 except ImportError:
     SDK_INSTALL = False
+import datetime
+import shelve
+
 from hamilton.lifecycle.default import CacheAdapter
 
 import molexp as me
@@ -28,17 +32,40 @@ class Project:
         proj_id: int | None = None,
     ):
         self.name = name
-        self._work_dir = Path(work_dir).absolute() / name
-        self._work_dir.mkdir(exist_ok=True)
         self.description = description
+        self._work_dir = Path(work_dir).absolute() / name
+        self.experiments = me.experiment.Experiments()
+        self._metadata = {
+            "version": "0.0.1",
+            "name": self.name,
+            "tag": tags,
+            "description": self.description,
+            "create_data": str(datetime.datetime.now().ctime()),
+            "last_update": str(datetime.datetime.now().ctime()),
+            "experiments": {},
+        }
+
+        if self._work_dir.exists():
+            metapath = self._work_dir / "metadata"
+
+            if not Path(metapath).exists():
+                warnings.warn(
+                    f"metadata not found in {self._work_dir}, project may not integrated"
+                )
+            else:
+                with shelve.open(metapath, "r", ) as db:
+                    self._metadata.update(db)
+                self.experiments.load(self._metadata["experiments"])
+        else:
+            self._work_dir.mkdir(exist_ok=True)
+
 
         self.execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
             executors.MultiThreadingExecutor(8),
         )
-        self.experiments = me.experiment.Experiments()
         self.tracker = None
-        if SDK_NOT_INSTALL and proj_id:
+        if SDK_INSTALL and proj_id:
             assert me.Config.USER_NAME != "undefined", ValueError(
                 "Please set your username in molexp.Config.USER_NAME"
             )
@@ -48,6 +75,18 @@ class Project:
                 dag_name=name,
                 tags=tags,
             )
+
+    @property
+    def metadata(self):
+        for exp in self.experiments:
+            self._metadata["experiments"][exp.name] = exp.metadata
+        return self._metadata
+
+    def __del__(self):
+        self.metadata["last_update"] = str(datetime.datetime.now().ctime())
+
+        with shelve.open(str(self._work_dir / "metadata"), 'n') as db:
+            db.update(self.metadata)
 
     @property
     def work_dir(self) -> Path:
@@ -89,8 +128,9 @@ class Project:
         if self.tracker:
             adapters.append(self.tracker)
 
-        cache_dir = task_tracker.work_dir / ".cache" / "cache"
-        cache_adapter = CacheAdapter(cache_path=str(cache_dir))
+        cache_dir = task_tracker.work_dir / ".cache"
+        cache_dir.mkdir(exist_ok=True)
+        cache_adapter = CacheAdapter(cache_path=str(cache_dir / "cache"))
         adapters.append(cache_adapter)
 
         dr = self._get_driver(
@@ -105,4 +145,3 @@ class Project:
         params.update(task.get_param())
 
         return dr.execute(final_vars=final_vars, inputs=params)
-

@@ -8,6 +8,8 @@ from hamilton import graph_types, lifecycle
 from molexp.param import Param
 from molexp.task import Task, Tasks
 
+import datetime
+
 
 class Experiment:
 
@@ -23,6 +25,30 @@ class Experiment:
         self.tasks = Tasks()
 
         self._modules = []
+
+        self._metadata = {
+            "name": self.name,
+            # "param": self.param,
+            "config": self.config,
+            "tasks": {},
+        }
+
+    @property
+    def metadata(self):
+        for task in self.tasks:
+            self._metadata['tasks'][task.name] = task.metadata
+        return self._metadata
+
+    @classmethod
+    def load(cls, metadata: dict):
+        name = metadata['name']
+        param = Param(metadata['param'])
+        config = metadata['config']
+        exp = cls(name, param, config)
+        exp.metadata = metadata
+        exp.tasks.load(metadata['tasks'])
+        exp.metadata['last_update'] = str(datetime.datetime.now().ctime())
+        return exp
 
     def __repr__(self):
         return f"<Experiment: {self.name}>"
@@ -86,6 +112,14 @@ class Experiments(list):
 
     def add(self, exp: Experiment):
         self.append(exp)
+
+    @classmethod
+    def load(cls, metadata: dict):
+        exps = cls()
+        for exp_name, exp_meta in metadata.items():
+            exp = Experiment.load(exp_meta)
+            exps.add(exp)
+        return exps
 
 
 class ExperimentTracker(

@@ -21,6 +21,25 @@ class Task:
         self.modules = modules
         self.dep_files = dep_files
 
+    @property
+    def metadata(self):
+        return {
+            'name': self.name,
+            # 'param': self.param,
+            'config': self.config,
+            # 'modules': [m.__name__ for m in self.modules],
+            'dep_files': self.dep_files,
+        }
+
+    @classmethod
+    def load(cls, metadata: dict):
+        name = metadata['name']
+        param = Param(metadata['param'])
+        config = metadata['config']
+        modules = metadata['modules']
+        dep_files = metadata['dep_files']
+        return cls(name, param, modules, config, dep_files)
+
     @classmethod
     def union(cls, name: str, *tasks: "Task") -> "Task":
         param = Param()
@@ -69,6 +88,14 @@ class Tasks(list):
             return self.get_by_name(task.name) | task
         else:
             self.append(task)
+
+    @classmethod
+    def load(cls, metadata: dict):
+        tasks = cls()
+        for task_name, task_metadata in metadata.items():
+            task = Task.load(task_metadata)
+            tasks.add(task)
+        return tasks
 
 
 class TaskTracker(
