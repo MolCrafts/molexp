@@ -59,6 +59,18 @@ class Experiment:
         task = Task(name=name, param=param, modules=modules, config=config, dep_files=dep_files)
         self.tasks.add(task)
         return task
+    
+    def merge_task(
+        self,
+        tasks_to_merge: list[str],
+    ):
+        tasks = [self.get_task(task) for task in tasks_to_merge]
+        for task in tasks:
+            self.tasks.remove(task)
+
+        task = Task.union(self.name, *tasks)
+        self.tasks.add(task)
+        return task
 
     def ls(self):
         return self.tasks

@@ -24,12 +24,21 @@ class Task:
     @classmethod
     def union(cls, name: str, *tasks: "Task") -> "Task":
         param = Param()
+        config = {}
+        modules = []
+        dep_files = []
         for task in tasks:
             param |= task.param
+            config |= task.config
+            modules += task.modules
+            dep_files += task.dep_files
         return cls(name, param)
 
     def __repr__(self):
         return f"<Task: {self.name}>"
+    
+    def __or__(self, other: "Task") -> "Task":
+        return Task.union(self.name, self, other)
 
     def get_param(self):
         return self.param.copy()
@@ -56,7 +65,10 @@ class Tasks(list):
         return None
 
     def add(self, task: Task):
-        self.append(task)
+        if task in self:
+            return self.get_by_name(task.name) | task
+        else:
+            self.append(task)
 
 
 class TaskTracker(
