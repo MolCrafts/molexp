@@ -1,7 +1,7 @@
-from typing import Sequence
-from itertools import product
-import string
 import random
+import string
+from itertools import product
+from typing import Sequence
 
 
 class Param(dict):

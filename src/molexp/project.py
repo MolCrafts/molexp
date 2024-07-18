@@ -1,54 +1,17 @@
-from types import ModuleType
-import molexp as me
-from hamilton_sdk import adapters
-from hamilton.execution.executors import DefaultExecutionManager
-from hamilton.execution import executors
-from hamilton import driver
-from hamilton.lifecycle import GraphAdapter
-from hamilton.experimental import h_cache
-
+import os
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
+from hamilton import driver
+from hamilton.execution import executors
+from hamilton.execution.executors import DefaultExecutionManager
+from hamilton.experimental import h_cache
+from hamilton.lifecycle import GraphAdapter
+from hamilton_sdk import adapters
+
+import molexp as me
 from molexp.experiment import Experiment
-import os
-
-
-# def map_func(
-#     tasks: ParamList|list[me.Task],
-#     experiments: list[Experiment],
-#     proj_dir: Path,
-#     modules: tuple,
-#     materializers:list=[],
-#     additional_vars:list=[],
-# ) -> Parallelizable[Any]:
-#     for task in tasks:
-#         for experiment in experiments:
-#             param = experiment.get_param()
-#             param.update(task.get_param())
-
-#             experiment_tracker = experiment.get_tracker(proj_dir)
-#             task_tracker = task.get_tracker(experiment_tracker.work_dir)
-
-#             config = task.get_config()
-#             config.update(experiment.get_config())
-
-#             trackers = [experiment_tracker, task_tracker]
-#             dr = (
-#                 driver.Builder()
-#                 .with_modules(*modules)
-#                 .with_config(task.get_config())
-#                 .with_adapters(*trackers)
-#                 .build()
-#             )
-
-#             if not materializers or not additional_vars:
-#                 additional_vars = dr.list_available_variables()
-#             yield dr.materialize(*materializers, inputs=param, additional_vars=additional_vars)
-
-
-# def reduce_func(map_func: Parallelizable[Any]) -> Any:
-#     pass
 
 
 class Project:
@@ -85,15 +48,15 @@ class Project:
     @property
     def work_dir(self) -> Path:
         return self._work_dir
-    
-    def def_exp(self, name:str, param:me.Param):
+
+    def def_exp(self, name: str, param: me.Param):
         exp = Experiment(
             name=name,
             param=param,
         )
         self.add_exp(exp)
         return exp
-    
+
     def add_exp(self, exp: Experiment):
         self.experiments.add(exp)
 
@@ -102,19 +65,14 @@ class Project:
 
     def ls(self):
         return self.experiments
-    
+
     def _get_driver(self, modules: list[ModuleType], adapters: list[GraphAdapter]):
 
-        dr = (
-            driver.Builder()
-            .with_modules(*modules)
-            .with_adapters(*adapters)
-            .build()
-        )
+        dr = driver.Builder().with_modules(*modules).with_adapters(*adapters).build()
         return dr
-    
+
     def start_task(self, path: str, final_vars: list[str] = []):
-        
+
         exp_name, task_name = path.split("/")
         exp = self.experiments.get_by_name(exp_name)
         task = exp.tasks.get_by_name(task_name)
@@ -127,7 +85,7 @@ class Project:
         if self.tracker:
             adapters.append(self.tracker)
 
-        cache_dir = task_tracker.work_dir/'.cache'
+        cache_dir = task_tracker.work_dir / ".cache"
         cache_dir.mkdir(exist_ok=True)
         cache_adapter = h_cache.CachingGraphAdapter(cache_dir)
         adapters.append(cache_adapter)
@@ -143,13 +101,10 @@ class Project:
         params = exp.get_param()
         params.update(task.get_param())
 
-        return dr.execute(
-            final_vars=final_vars,
-            inputs=params
-        )
+        return dr.execute(final_vars=final_vars, inputs=params)
 
     # def resume_task(self, name:str, param:me.Param, modules: list[ModuleType] = [], config:dict={}, from_task:str|None=None, from_files: list[str|Path]|None = None, final_vars: list[str] = []):
-        
+
     #     exp_name, task_name = name.split("/")
     #     exp = self.experiments.get_by_name(exp_name)
     #     task = exp.def_task(task_name, param, modules, config)
@@ -171,13 +126,11 @@ class Project:
     #                 to_path.unlink()
     #             to_path.symlink_to(file)
     #     elif from_files:
-            
+
     #         for file_path in from_files:
     #             Path(file_path).symlink_to(task_tracker.work_dir / Path(file_path).name)
-                
 
     #     self.start_task(name, final_vars)
-        
 
     # def run(self, task, experiment, *modules, materializers=[], additional_vars=[]):
 

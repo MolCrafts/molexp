@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 import os, types
 
+
 class Task:
 
     def __init__(
@@ -12,13 +13,20 @@ class Task:
         param: Param = Param(),
         modules: list[types.ModuleType] = [],
         config: dict = {},
-        dependencies: list[str] = [],
+        dep_files: list[str] = [],
     ):
         self.name = name
         self.param = param
         self.config = config
         self.modules = modules
-        self.dependencies = dependencies
+        self.dep_files = dep_files
+
+    @classmethod
+    def union(cls, name: str, *tasks: "Task") -> "Task":
+        param = Param()
+        for task in tasks:
+            param |= task.param
+        return cls(name, param)
 
     def __repr__(self):
         return f"<Task: {self.name}>"
@@ -30,7 +38,7 @@ class Task:
         return self.config
 
     def get_tracker(self, work_dir: str | Path = Path.cwd()):
-        return TaskTracker(self.name, self.param, self.config, work_dir, self.dependencies)
+        return TaskTracker(self.name, self.param, self.config, work_dir, self.dep_files)
 
     def start(self):
         pass
@@ -62,13 +70,13 @@ class TaskTracker(
         param: Param,
         config: dict,
         work_dir: str | Path,
-        dependencies: list[str],
+        dep_files: list[str],
     ):
 
         self.name = name
         self.param = param
         self.config = config
-        self.dependencies = dependencies
+        self.dep_files = dep_files
 
         self.init_dir = Path(work_dir)
         self.work_dir = Path(work_dir).resolve().joinpath(name)
@@ -76,7 +84,7 @@ class TaskTracker(
         self.meta: dict = {}
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
-        for dep in dependencies:
+        for dep in dep_files:
             task_name, file_name = dep.split("/")
             task_path = self.init_dir / task_name
             if not task_path.exists():
@@ -95,7 +103,7 @@ class TaskTracker(
         node_tags: dict[str, Any],
         node_kwargs: dict[str, Any],
         node_return_type: type,
-        task_id: str|None,
+        task_id: str | None,
         run_id: str,
         node_input_types: dict[str, Any],
         **future_kwargs: Any,
@@ -110,7 +118,7 @@ class TaskTracker(
         node_kwargs: dict[str, Any],
         node_return_type: type,
         result: Any,
-        error: Exception|None,
+        error: Exception | None,
         success: bool,
         task_id: str | None,
         run_id: str,

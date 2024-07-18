@@ -1,19 +1,20 @@
-from pathlib import Path
-from typing import Any, Dict
 import os
-from typing import Collection, List
+import types
+from pathlib import Path
+from typing import Any, Collection, Dict, List
 
 from hamilton import graph_types, lifecycle
 
-import molexp as me
+from molexp.param import Param
 from molexp.task import Task, Tasks
+
 
 class Experiment:
 
     def __init__(
         self,
         name: str,
-        param: me.Param,
+        param: Param,
         config: dict = {},
     ):
         self.name = name
@@ -47,32 +48,15 @@ class Experiment:
     def get_task(self, name: str) -> Task:
         return self.tasks.get_by_name(name)
 
-    def def_task(self, name: str, param: me.Param, modules: list, config: dict = {}) -> Task:
-        task = Task(
-            name=name,
-            param=param,
-            modules=modules,
-            config=config,
-        )
-        self.tasks.add(task)
-        return task
-
-    def resume_task(
+    def def_task(
         self,
         name: str,
-        param: me.Param,
-        modules: list,
+        param: Param = Param(),
+        modules: list[types.ModuleType] = [],
         config: dict = {},
-        from_files: list[str] | None = None,
+        dep_files: list[str] = [],
     ) -> Task:
-
-        task = Task(
-            name=name,
-            param=param,
-            modules=modules,
-            config=config,
-            dependencies=from_files,
-        )
+        task = Task(name=name, param=param, modules=modules, config=config, dep_files=dep_files)
         self.tasks.add(task)
         return task
 
@@ -97,7 +81,7 @@ class ExperimentTracker(
     lifecycle.GraphExecutionHook,
     # lifecycle.GraphConstructionHook,
 ):
-    def __init__(self, name: str, param: me.Param, config: dict, work_dir: str | Path):
+    def __init__(self, name: str, param: Param, config: dict, work_dir: str | Path):
 
         self.name = name
         self.param = param

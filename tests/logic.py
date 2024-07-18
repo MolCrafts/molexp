@@ -1,6 +1,6 @@
 from pathlib import Path
-import numpy as np
 
+import numpy as np
 from hamilton.function_modifiers import save_to, source, tag
 
 

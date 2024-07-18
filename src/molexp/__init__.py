@@ -1,5 +1,5 @@
 from .config import Config
-from .param import Param, ParamSpace, ParamList
 from .experiment import *
+from .param import Param, ParamList, ParamSpace
 from .project import *
 from .script import *
