@@ -76,6 +76,12 @@ class Project:
                 tags=tags,
             )
 
+    def __repr__(self):
+        return f"<Project: {self.name}>"
+    
+    def add_asset(self, name: str)->me.Asset:
+        return me.Asset(name, self._work_dir / name)
+
     @property
     def metadata(self):
         for exp in self.experiments:
@@ -85,8 +91,8 @@ class Project:
     def __del__(self):
         self.metadata["last_update"] = str(datetime.datetime.now().ctime())
 
-        with shelve.open(str(self._work_dir / "metadata"), 'n') as db:
-            db.update(self.metadata)
+        # with shelve.open(str(self._work_dir / "metadata"), 'n') as db:
+        #     db.update(self.metadata)
 
     @property
     def work_dir(self) -> Path:
@@ -114,34 +120,37 @@ class Project:
         dr = driver.Builder().with_modules(*modules).with_adapters(*adapters).build()
         return dr
 
-    def start_task(self, path: str, final_vars: list[str] = []):
+    def start_task(self, path: str, final_vars: list[str] = [], n_cases:int|None = None):
 
         exp_name, task_name = path.split("/")
         exp = self.experiments.get_by_name(exp_name)
         task = exp.tasks.get_by_name(task_name)
-        exp_tracker = exp.get_tracker(self._work_dir)  # inside proj path
-        task_tracker = task.get_tracker(exp_tracker.work_dir)  # inside exp path
-        modules = []
-        modules.extend(exp.modules)
-        modules.extend(task.modules)
-        adapters = [exp_tracker, task_tracker]
-        if self.tracker:
-            adapters.append(self.tracker)
+        exp_tracker = exp.get_tracker(self._work_dir, n_cases=n_cases)  # inside proj path
 
-        cache_dir = task_tracker.work_dir / ".cache"
-        cache_dir.mkdir(exist_ok=True)
-        cache_adapter = CacheAdapter(cache_path=str(cache_dir / "cache"))
-        adapters.append(cache_adapter)
+        for exp_work_dir in exp_tracker.case_work_dirs:
 
-        dr = self._get_driver(
-            modules=modules,
-            adapters=adapters,
-        )
+            task_tracker = task.get_tracker(exp_work_dir)  # inside exp path
+            modules = []
+            modules.extend(exp.modules)
+            modules.extend(task.modules)
+            adapters = [exp_tracker, task_tracker]
+            if self.tracker:
+                adapters.append(self.tracker)
 
-        if not final_vars:
-            final_vars = dr.list_available_variables()
+            cache_dir = task_tracker.work_dir / ".cache"
+            cache_dir.mkdir(exist_ok=True)
+            cache_adapter = CacheAdapter(cache_path=str(cache_dir / "cache"))
+            adapters.append(cache_adapter)
 
-        params = exp.get_param()
-        params.update(task.get_param())
+            dr = self._get_driver(
+                modules=modules,
+                adapters=adapters,
+            )
 
-        return dr.execute(final_vars=final_vars, inputs=params)
+            if not final_vars:
+                final_vars = dr.list_available_variables()
+
+            params = exp.get_param()
+            params.update(task.get_param())
+
+            dr.execute(final_vars=final_vars, inputs=params)

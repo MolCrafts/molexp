@@ -7,6 +7,7 @@ from hamilton import graph_types, lifecycle
 
 from molexp.param import Param
 from molexp.task import Task, Tasks
+from molexp.asset import Asset
 
 import datetime
 
@@ -52,6 +53,9 @@ class Experiment:
 
     def __repr__(self):
         return f"<Experiment: {self.name}>"
+    
+    def add_asset(self, name: str)->Asset:
+        return Asset(name, self._work_dir / name)
 
     @property
     def modules(self):
@@ -63,12 +67,13 @@ class Experiment:
     def get_config(self):
         return self.config
 
-    def get_tracker(self, work_dir: str | Path = Path.cwd()):
+    def get_tracker(self, work_dir: str | Path = Path.cwd(), n_cases: int|None = None):
         return ExperimentTracker(
             self.name,
             self.param,
             self.config,
             work_dir,
+            n_cases,
         )
 
     def get_task(self, name: str) -> Task:
@@ -127,7 +132,7 @@ class ExperimentTracker(
     lifecycle.GraphExecutionHook,
     # lifecycle.GraphConstructionHook,
 ):
-    def __init__(self, name: str, param: Param, config: dict, work_dir: str | Path):
+    def __init__(self, name: str, param: Param, config: dict, work_dir: str | Path, n_cases: int|None = None):
 
         self.name = name
         self.param = param
@@ -136,9 +141,23 @@ class ExperimentTracker(
         self.init_dir = Path(work_dir)
         self.work_dir = Path(work_dir).resolve().joinpath(name)
 
-        self.meta: dict = {}
+        self.n_cases = n_cases
+
         if not self.work_dir.exists():
             self.work_dir.mkdir(parents=True, exist_ok=True)
+        
+        if self.n_cases:
+            for i in range(self.n_cases):
+                case_dir = self.work_dir / f"case{i}"
+                if not case_dir.exists():
+                    case_dir.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def case_work_dirs(self):
+        if self.n_cases:
+            return [self.work_dir / f"case{i}" for i in range(self.n_cases)]
+        else:
+            return [self.work_dir]
 
     def run_before_graph_execution(
         self,
