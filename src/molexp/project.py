@@ -65,11 +65,12 @@ class Project:
     def work_dir(self) -> Path:
         return self._work_dir
 
-    def def_exp(self, name: str, param: me.Param):
+    def def_exp(self, name: str):
         exp = Experiment(
             name=name,
-            param=param,
+            path=self._work_dir,
         )
+        exp.init()
         self.add_exp(exp)
         return exp
 
@@ -78,60 +79,68 @@ class Project:
 
     def get_exp(self, name: str) -> Experiment:
         return self.experiments.get_by_name(name)
+    
+    def get_tasks(self, path: str) -> list[me.Task]:
+        path_list = reversed(path.split("/"))
+
+        exp = self.get_exp(path_list.pop())
+        tasks = exp.get_task(path_list)
+
+        return tasks
 
     def ls(self):
         return self.experiments
 
-    def _get_driver(self, modules: list[ModuleType], adapters: list[GraphAdapter]):
+    def _get_driver(self, exp: me.Experiment, task: me.Task, config: dict) -> driver.Driver:
 
-        dr = driver.Builder().with_modules(*modules).with_adapters(*adapters).build()
+        exp_tracker = exp.get_tracker()
+        task_tracker = task.get_tracker()
+        modules = set()
+        modules.add(exp.modules)
+        modules.add(task.modules)
+        adapters = [exp_tracker, task_tracker]
+        cache_dir = task_tracker.work_dir / ".cache"
+        cache_dir.mkdir(exist_ok=True)
+        cache_adapter = CacheAdapter(cache_path=str(cache_dir / "cache"))
+        adapters.append(cache_adapter)
+        dr = (
+            driver.Builder()
+            .with_adapters(*adapters)
+            .with_modules(*modules)
+            .with_config(config)
+            .build()
+        )
+
         return dr
 
-    def start_task(
-        self, path: str, param: me.Param, final_vars: list[str] = [], n_cases: int | None = None
-    ):
+    def start_task(self, path: str, param: me.Param, final_vars: list[str] = [], config: dict = {}):
 
-        exp_name, task_name = path.split("/")
-        exp = self.experiments.get_by_name(exp_name)
-        task = exp.tasks.get_by_name(task_name)
-        exp_tracker = exp.get_tracker(self._work_dir, n_cases=n_cases)  # inside proj path
+        tasks = self.get_tasks(path)
 
-        for case in range(n_cases):
+        if len(tasks) > 1:
+            raise ValueError("Only one task can be started at a time")
 
-            case_work_dir = exp_tracker.get_case_dir(case)
+        dr = self._get_driver(path, config)
+        if not final_vars:
+            final_vars = dr.list_available_variables()
 
-            task_tracker = task.get_tracker(case_work_dir)  # inside exp path
-            modules = []
-            modules.extend(exp.modules)
-            modules.extend(task.modules)
-            adapters = [exp_tracker, task_tracker]
-            if self.tracker:
-                adapters.append(self.tracker)
+        params = tasks.param
+        params |= param
 
-            cache_dir = task_tracker.work_dir / ".cache"
-            cache_dir.mkdir(exist_ok=True)
-            cache_adapter = CacheAdapter(cache_path=str(cache_dir / "cache"))
-            adapters.append(cache_adapter)
+        dr.execute(final_vars=final_vars, inputs=params)
 
-            dr = self._get_driver(
-                modules=modules,
-                adapters=adapters,
-            )
+    def restart_task(self, path: str, param: me.Param, final_vars: list[str] = [], config: dict = {}):
 
-            if not final_vars:
-                final_vars = dr.list_available_variables()
+        tasks = self.get_tasks(path)
 
-            _param = exp.get_param()
-            _param.update(param)
-            task.param = _param
+        if len(tasks) > 1:
+            raise ValueError("Only one task can be started at a time")
 
-            dr.execute(final_vars=final_vars, inputs=_param)
+        dr = self._get_driver(path, config)
+        if not final_vars:
+            final_vars = dr.list_available_variables()
 
-    def start_tasks(
-        self,
-        params: dict[str, me.Param],
-        modules: list[ModuleType],
-        final_vars: list[str] = [],
-        n_cases: int | None = None,
-    ):
-        pass
+        params = tasks.param
+        params |= param
+
+        dr.execute(final_vars=final_vars, inputs=params)

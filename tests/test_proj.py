@@ -23,13 +23,14 @@ class TestProject:
 
     def test_def_exp(self, proj: me.Project):
 
-        exp1 = proj.def_exp(name="exp1", param=me.param.random())
+        exp1 = proj.def_exp(name="exp1")
         exp1.def_task(name="task1", modules=[logic])
         assert exp1.path == proj.work_dir
-        exp2 = proj.def_exp(name="exp2", param=me.param.random())
+        exp2 = proj.def_exp(name="exp2")
         assert exp2.path == proj.work_dir
-        exp3 = proj.def_exp(name="exp3", param=me.param.random())
+        exp3 = proj.def_exp(name="exp3")
         assert exp3.path == proj.work_dir
+        assert len(proj.ls())== 3
 
     def test_list_exp(self, proj):
 

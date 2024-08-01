@@ -9,26 +9,26 @@ from molexp.param import Param
 from molexp.task import Task, Tasks
 from molexp.asset import Asset
 
-import datetime
-
 
 class Experiment:
 
     def __init__(
         self,
         name: str,
-        path: Path,
-        param: Param,
+        param: Param = Param(),
         config: dict = {},
+        path: Path = Path.cwd(),
     ):
         self.name = name
-        self.path = path
+        self.path = Path(path)
         self.param = param
         self.config = config
         self.tasks = Tasks()
         self._n_trials = 0
 
         self._modules = []
+
+        self._work_dir = self.path / name
 
     @property
     def n_trials(self):
@@ -47,12 +47,31 @@ class Experiment:
     def __repr__(self):
         return f"<Experiment: {self.name}>"
     
+    def __call__(self, name: str|None = None, path: str|None = None, param: Param|None = None, config: dict|None = None):
+
+        name = name or self.name
+        path = path or self.path
+        param = param or self.param
+        config = config or self.config
+
+        return Experiment(
+            name=name,
+            path=path,
+            param=param,
+            config=config,
+        )
+        
+    
     def add_asset(self, name: str)->Asset:
         return Asset(name, self._work_dir / name)
 
     @property
     def modules(self):
         return self._modules
+
+    @property
+    def work_dir(self) -> Path:
+        return self._work_dir
 
     def get_param(self):
         return self.param.copy()
@@ -79,7 +98,8 @@ class Experiment:
         config: dict = {},
         dep_files: list[str] = [],
     ) -> Task:
-        task = Task(name=name, param=None, modules=modules, config=config, dep_files=dep_files)
+        task = Task(name=name, path=self.work_dir, param=None, modules=modules, config=config, dep_files=dep_files)
+        task.init()
         self.tasks.add(task)
         return task
     

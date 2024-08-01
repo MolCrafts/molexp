@@ -3,21 +3,27 @@ from molexp.param import Param
 from pathlib import Path
 from typing import Any
 import os, types
-
+from enum import IntEnum
 
 class Task:
+
+    class Status(IntEnum):
+        PENDING = 0
+        RUNNING = 1
+        COMPLETED = 2
+        Error = 3
 
     def __init__(
         self,
         name: str,
-        path: Path,
         param: Param = Param(),
         modules: list[types.ModuleType] = [],
         config: dict = {},
         dep_files: list[str] = [],
+        path: Path = Path.cwd(),
     ):
         self.name = name
-        self.path = path
+        self.path = Path(path)
         self.param = param
         self.config = config
         self.modules = modules
@@ -66,7 +72,14 @@ class Task:
             config |= task.config
             modules += task.modules
             dep_files += task.dep_files
-        return cls(name, param)
+        return cls(
+            name = name,
+            path = tasks[0].path,
+            param = param,
+            modules = modules,
+            config = config,
+            dep_files = dep_files,
+        )
 
     def __repr__(self):
         return f"<Task: {self.name}>"
@@ -82,12 +95,6 @@ class Task:
 
     def get_tracker(self, work_dir: str | Path = Path.cwd()):
         return TaskTracker(self.name, self.param, self.config, work_dir, self.dep_files)
-
-    def start(self):
-        pass
-
-    def restart(self, param: Param | None = None):
-        pass
 
 
 class Tasks(list):

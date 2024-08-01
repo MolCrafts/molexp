@@ -20,10 +20,7 @@ class TestParam:
     
     def test_serialize(self, param):
         import pickle, shutil
-        s = pickle.dumps(param)
-        p = pickle.loads(s)
+        p = pickle.loads(pickle.dumps(param))
+        assert np.all(p.pop('numpy') == param.pop('numpy'))
         assert param == p
         
-    
-    
-    

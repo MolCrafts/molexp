@@ -6,6 +6,14 @@ class Param(dict):
 
     def __repr__(self) -> str:
         return f"<Param {super().__repr__()}>"
+    
+    @classmethod
+    def random(cls, nkeys:int = 3) -> "Param":
+        import random
+        import string
+        return cls(
+            {key: random.choice(string.ascii_letters) for key in string.ascii_letters[:nkeys]}
+        )
 
 
 class ParamList(list[Param]):
@@ -18,10 +26,3 @@ class ParamSpace(dict[str, Sequence]):
         return ParamList(
             [Param(dict(zip(self.keys(), values))) for values in product(*self.values())]
         )
-
-def random() -> Param:
-    import random
-    import string
-    return Param(
-        {key: random.choice(string.ascii_letters) for key in string.ascii_letters}
-    )
