@@ -10,35 +10,50 @@ class Task:
     def __init__(
         self,
         name: str,
+        path: Path,
         param: Param = Param(),
         modules: list[types.ModuleType] = [],
         config: dict = {},
         dep_files: list[str] = [],
     ):
         self.name = name
+        self.path = path
         self.param = param
         self.config = config
         self.modules = modules
         self.dep_files = dep_files
 
-    @property
-    def metadata(self):
-        return {
-            'name': self.name,
-            # 'param': self.param,
-            'config': self.config,
-            # 'modules': [m.__name__ for m in self.modules],
-            'dep_files': self.dep_files,
-        }
+    def init(self):
+        if not self.path.exists():
+            self.path.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def load(cls, metadata: dict):
-        name = metadata['name']
-        param = Param(metadata['param'])
-        config = metadata['config']
-        modules = metadata['modules']
-        dep_files = metadata['dep_files']
-        return cls(name, param, modules, config, dep_files)
+    def load(cls, state: dict):
+        ins = cls(
+            state['name'],
+            state['path'],
+            state['param'],
+            state['config'],
+            state['modules'],
+            state['dep_files'],
+        )
+        ins.init()
+        return cls
+    
+    def __getstate__(self):
+        return self.get_state()
+    
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+    
+    def get_state(self):
+        return {
+            'name': self.name,
+            'param': self.param,
+            'config': self.config,
+            'modules': self.modules,
+            'dep_files': self.dep_files,
+        }
 
     @classmethod
     def union(cls, name: str, *tasks: "Task") -> "Task":

@@ -17,39 +17,32 @@ class Experiment:
     def __init__(
         self,
         name: str,
+        path: Path,
         param: Param,
         config: dict = {},
     ):
         self.name = name
+        self.path = path
         self.param = param
         self.config = config
         self.tasks = Tasks()
+        self._n_trials = 0
 
         self._modules = []
 
-        self._metadata = {
-            "name": self.name,
-            # "param": self.param,
-            "config": self.config,
-            "tasks": {},
-        }
-
     @property
-    def metadata(self):
-        for task in self.tasks:
-            self._metadata['tasks'][task.name] = task.metadata
-        return self._metadata
+    def n_trials(self):
+        return self._n_trials
 
-    @classmethod
-    def load(cls, metadata: dict):
-        name = metadata['name']
-        param = Param(metadata['param'])
-        config = metadata['config']
-        exp = cls(name, param, config)
-        exp.metadata = metadata
-        exp.tasks.load(metadata['tasks'])
-        exp.metadata['last_update'] = str(datetime.datetime.now().ctime())
-        return exp
+    def init(self, n_trials: int=0):
+        if not self.path.exists():
+            self.path.mkdir(parents=True, exist_ok=True)
+        self._n_trials = n_trials
+        if n_trials:
+            for i in range(n_trials):
+                trial_dir = self.path / f"trial{i}"
+                if not trial_dir.exists():
+                    trial_dir.mkdir(parents=True, exist_ok=True)
 
     def __repr__(self):
         return f"<Experiment: {self.name}>"
@@ -82,12 +75,11 @@ class Experiment:
     def def_task(
         self,
         name: str,
-        param: Param = Param(),
         modules: list[types.ModuleType] = [],
         config: dict = {},
         dep_files: list[str] = [],
     ) -> Task:
-        task = Task(name=name, param=param, modules=modules, config=config, dep_files=dep_files)
+        task = Task(name=name, param=None, modules=modules, config=config, dep_files=dep_files)
         self.tasks.add(task)
         return task
     
@@ -152,12 +144,8 @@ class ExperimentTracker(
                 if not case_dir.exists():
                     case_dir.mkdir(parents=True, exist_ok=True)
 
-    @property
-    def case_work_dirs(self):
-        if self.n_cases:
-            return [self.work_dir / f"case{i}" for i in range(self.n_cases)]
-        else:
-            return [self.work_dir]
+    def get_case_dir(self, case: int):
+        return self.work_dir / f"case{case}"
 
     def run_before_graph_execution(
         self,

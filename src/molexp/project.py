@@ -26,39 +26,16 @@ class Project:
     def __init__(
         self,
         name: str,
-        work_dir: str | Path = Path.cwd(),
+        path: str | Path = Path.cwd(),
         tags: dict = {},
         description: str = "",
         proj_id: int | None = None,
     ):
         self.name = name
         self.description = description
-        self._work_dir = Path(work_dir).absolute() / name
+        self._work_dir = Path(path).absolute() / name
         self.experiments = me.experiment.Experiments()
-        self._metadata = {
-            "version": "0.0.1",
-            "name": self.name,
-            "tag": tags,
-            "description": self.description,
-            "create_data": str(datetime.datetime.now().ctime()),
-            "last_update": str(datetime.datetime.now().ctime()),
-            "experiments": {},
-        }
-
-        if self._work_dir.exists():
-            metapath = self._work_dir / "metadata"
-
-            if not Path(metapath).exists():
-                warnings.warn(
-                    f"metadata not found in {self._work_dir}, project may not integrated"
-                )
-            else:
-                with shelve.open(metapath, "r", ) as db:
-                    self._metadata.update(db)
-                self.experiments.load(self._metadata["experiments"])
-        else:
-            self._work_dir.mkdir(exist_ok=True)
-
+        self.assetes = []
 
         self.execution_manager = DefaultExecutionManager(
             executors.SynchronousLocalTaskExecutor(),
@@ -78,21 +55,11 @@ class Project:
 
     def __repr__(self):
         return f"<Project: {self.name}>"
-    
-    def add_asset(self, name: str)->me.Asset:
-        return me.Asset(name, self._work_dir / name)
 
-    @property
-    def metadata(self):
-        for exp in self.experiments:
-            self._metadata["experiments"][exp.name] = exp.metadata
-        return self._metadata
-
-    def __del__(self):
-        self.metadata["last_update"] = str(datetime.datetime.now().ctime())
-
-        # with shelve.open(str(self._work_dir / "metadata"), 'n') as db:
-        #     db.update(self.metadata)
+    def add_asset(self, name: str) -> me.Asset:
+        asset = me.Asset(name, self._work_dir / name)
+        self.assetes.append(asset)
+        return asset
 
     @property
     def work_dir(self) -> Path:
@@ -120,16 +87,20 @@ class Project:
         dr = driver.Builder().with_modules(*modules).with_adapters(*adapters).build()
         return dr
 
-    def start_task(self, path: str, final_vars: list[str] = [], n_cases:int|None = None):
+    def start_task(
+        self, path: str, param: me.Param, final_vars: list[str] = [], n_cases: int | None = None
+    ):
 
         exp_name, task_name = path.split("/")
         exp = self.experiments.get_by_name(exp_name)
         task = exp.tasks.get_by_name(task_name)
         exp_tracker = exp.get_tracker(self._work_dir, n_cases=n_cases)  # inside proj path
 
-        for exp_work_dir in exp_tracker.case_work_dirs:
+        for case in range(n_cases):
 
-            task_tracker = task.get_tracker(exp_work_dir)  # inside exp path
+            case_work_dir = exp_tracker.get_case_dir(case)
+
+            task_tracker = task.get_tracker(case_work_dir)  # inside exp path
             modules = []
             modules.extend(exp.modules)
             modules.extend(task.modules)
@@ -150,7 +121,17 @@ class Project:
             if not final_vars:
                 final_vars = dr.list_available_variables()
 
-            params = exp.get_param()
-            params.update(task.get_param())
+            _param = exp.get_param()
+            _param.update(param)
+            task.param = _param
 
-            dr.execute(final_vars=final_vars, inputs=params)
+            dr.execute(final_vars=final_vars, inputs=_param)
+
+    def start_tasks(
+        self,
+        params: dict[str, me.Param],
+        modules: list[ModuleType],
+        final_vars: list[str] = [],
+        n_cases: int | None = None,
+    ):
+        pass
