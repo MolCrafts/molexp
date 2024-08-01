@@ -1,0 +1,62 @@
+// Dependency Graph
+digraph {
+	graph [compound=true concentrate=true rankdir=LR ranksep=0.4]
+	parmchk [label=<<b>parmchk</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	prepare [label=<<b>prepare</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	call_antechamber [label=<<b>call_antechamber</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	after_build [label=<<b>after_build</b><br /><br /><i>PickleSaver</i>> fillcolor="#FFC857" fontname=Helvetica margin=0.15 shape=cylinder style="rounded,filled"]
+	gen_eq_script [label=<<b>gen_eq_script</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	tmp_path [label=<<b>tmp_path</b><br /><br /><i>Path</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	n_name [label=<<b>n_name</b><br /><br /><i>str</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	units_path [label=<<b>units_path</b><br /><br /><i>Path</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	to_lammps [label=<<b>to_lammps</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	m_name [label=<<b>m_name</b><br /><br /><i>str</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	connect [label=<<b>connect</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	head_name [label=<<b>head_name</b><br /><br /><i>str</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	copy_ff [label=<<b>copy_ff</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	submit [label=<<b>submit</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	define_connect [label=<<b>define_connect</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	pack [label=<<b>pack</b><br /><br /><i>dict</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	tail_name [label=<<b>tail_name</b><br /><br /><i>str</i>> fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+	prepare -> parmchk
+	tmp_path -> parmchk
+	define_connect -> prepare
+	tmp_path -> prepare
+	units_path -> call_antechamber
+	tmp_path -> call_antechamber
+	submit -> after_build
+	copy_ff -> gen_eq_script
+	_gen_eq_script_inputs [label=<<table border="0"><tr><td>work_dir</td><td>str</td></tr></table>> fontname=Helvetica margin=0.15 shape=rectangle style=dashed]
+	_gen_eq_script_inputs -> gen_eq_script
+	pack -> to_lammps
+	tmp_path -> to_lammps
+	_to_lammps_inputs [label=<<table border="0"><tr><td>n_chains</td><td>int</td></tr><tr><td>work_dir</td><td>str</td></tr></table>> fontname=Helvetica margin=0.15 shape=rectangle style=dashed]
+	_to_lammps_inputs -> to_lammps
+	parmchk -> connect
+	tmp_path -> connect
+	_connect_inputs [label=<<table border="0"><tr><td>repeat</td><td>int</td></tr><tr><td>work_dir</td><td>str</td></tr><tr><td>repeat_unit</td><td>list</td></tr></table>> fontname=Helvetica margin=0.15 shape=rectangle style=dashed]
+	_connect_inputs -> connect
+	to_lammps -> copy_ff
+	_copy_ff_inputs [label=<<table border="0"><tr><td>work_dir</td><td>str</td></tr></table>> fontname=Helvetica margin=0.15 shape=rectangle style=dashed]
+	_copy_ff_inputs -> copy_ff
+	gen_eq_script -> submit
+	_submit_inputs [label=<<table border="0"><tr><td>repeat</td><td>int</td></tr><tr><td>work_dir</td><td>str</td></tr><tr><td>repeat_unit</td><td>list</td></tr></table>> fontname=Helvetica margin=0.15 shape=rectangle style=dashed]
+	_submit_inputs -> submit
+	call_antechamber -> define_connect
+	tmp_path -> define_connect
+	n_name -> define_connect
+	m_name -> define_connect
+	head_name -> define_connect
+	tail_name -> define_connect
+	connect -> pack
+	tmp_path -> pack
+	_pack_inputs [label=<<table border="0"><tr><td>n_chains</td><td>int</td></tr><tr><td>density</td><td>float</td></tr></table>> fontname=Helvetica margin=0.15 shape=rectangle style=dashed]
+	_pack_inputs -> pack
+	subgraph cluster__legend {
+		graph [fontname=helvetica label=Legend rank=same]
+		input [fontname=Helvetica margin=0.15 shape=rectangle style=dashed]
+		function [fillcolor="#b4d8e4" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+		output [fillcolor="#FFC857" fontname=Helvetica margin=0.15 shape=rectangle style="rounded,filled"]
+		materializer [fontname=Helvetica margin="0.15,0.1" shape=cylinder]
+	}
+}

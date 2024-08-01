@@ -1,0 +1,9 @@
+tolerance 2.0
+    output NMNMNMP_n20.pdb
+    filetype pdb
+
+    structure NMNMNMP.pdb
+    number 20
+    inside cube 0. 0. 0. 199.29753560751493
+    end structure
+    
