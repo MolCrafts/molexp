@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 from hamilton.function_modifiers import save_to, source, tag
+import time
 
 
 def first_step(a: str, b: int, c: float) -> str:
@@ -17,6 +18,12 @@ def manual_save_step(first_step: str, a: str, b: int, c:float) -> str:
     with open("manual_save_step.txt", "w") as f:
         f.write(first_step)
     return f"manual_save_step: a={a}, b={b}, c={c}"
+
+def sleep_report_step(manual_save_step:str)->str:
+    for i in range(5):
+        time.sleep(1)
+        print(f"sleep_report_step: {i}", flush=True)
+    return f"sleep_report_step: {i}"
 
 call_time = 0
 

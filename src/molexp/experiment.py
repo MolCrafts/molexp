@@ -9,57 +9,67 @@ from molexp.param import Param
 from molexp.task import Task, Tasks
 from molexp.asset import Asset
 
-import datetime
-
 
 class Experiment:
 
     def __init__(
         self,
         name: str,
-        param: Param,
+        param: Param = Param(),
         config: dict = {},
+        path: Path = Path.cwd()
     ):
         self.name = name
+        self.path = Path(path)
         self.param = param
         self.config = config
         self.tasks = Tasks()
 
         self._modules = []
 
-        self._metadata = {
-            "name": self.name,
-            # "param": self.param,
-            "config": self.config,
-            "tasks": {},
-        }
+        self._work_dir = self.path / name
 
     @property
-    def metadata(self):
-        for task in self.tasks:
-            self._metadata['tasks'][task.name] = task.metadata
-        return self._metadata
+    def n_trials(self):
+        return self._n_trials
 
-    @classmethod
-    def load(cls, metadata: dict):
-        name = metadata['name']
-        param = Param(metadata['param'])
-        config = metadata['config']
-        exp = cls(name, param, config)
-        exp.metadata = metadata
-        exp.tasks.load(metadata['tasks'])
-        exp.metadata['last_update'] = str(datetime.datetime.now().ctime())
-        return exp
+    def init(self,):
+        if not self.path.exists():
+            self.path.mkdir(parents=True, exist_ok=True)
 
     def __repr__(self):
         return f"<Experiment: {self.name}>"
-    
-    def add_asset(self, name: str)->Asset:
+
+    def __call__(
+        self,
+        name: str | None = None,
+        path: str | None = None,
+        param: Param | None = None,
+        config: dict | None = None,
+    ):
+
+        name = name or self.name
+        path = path or self.path
+        param = param or self.param
+        config = config or self.config
+
+        return Experiment(
+            name=name,
+            path=path,
+            param=param,
+            config=config,
+        )
+
+    def add_asset(self, name: str) -> Asset:
         return Asset(name, self._work_dir / name)
 
     @property
     def modules(self):
         return self._modules
+
+    @property
+    def work_dir(self) -> Path:
+        return self._work_dir
 
     def get_param(self):
         return self.param.copy()
@@ -67,7 +77,7 @@ class Experiment:
     def get_config(self):
         return self.config
 
-    def get_tracker(self, work_dir: str | Path = Path.cwd(), n_cases: int|None = None):
+    def get_tracker(self, work_dir: str | Path = Path.cwd(), n_cases: int | None = None):
         return ExperimentTracker(
             self.name,
             self.param,
@@ -87,10 +97,18 @@ class Experiment:
         config: dict = {},
         dep_files: list[str] = [],
     ) -> Task:
-        task = Task(name=name, param=param, modules=modules, config=config, dep_files=dep_files)
+        task = Task(
+            name=name,
+            param=param,
+            path=self.work_dir,
+            modules=modules,
+            config=config,
+            dep_files=dep_files,
+        )
+        task.init()
         self.tasks.add(task)
         return task
-    
+
     def merge_task(
         self,
         tasks_to_merge: list[str],
@@ -132,7 +150,13 @@ class ExperimentTracker(
     lifecycle.GraphExecutionHook,
     # lifecycle.GraphConstructionHook,
 ):
-    def __init__(self, name: str, param: Param, config: dict, work_dir: str | Path, n_cases: int|None = None):
+    def __init__(
+        self,
+        name: str,
+        param: Param,
+        config: dict,
+        work_dir: str | Path,
+    ):
 
         self.name = name
         self.param = param
@@ -140,24 +164,6 @@ class ExperimentTracker(
 
         self.init_dir = Path(work_dir)
         self.work_dir = Path(work_dir).resolve().joinpath(name)
-
-        self.n_cases = n_cases
-
-        if not self.work_dir.exists():
-            self.work_dir.mkdir(parents=True, exist_ok=True)
-        
-        if self.n_cases:
-            for i in range(self.n_cases):
-                case_dir = self.work_dir / f"case{i}"
-                if not case_dir.exists():
-                    case_dir.mkdir(parents=True, exist_ok=True)
-
-    @property
-    def case_work_dirs(self):
-        if self.n_cases:
-            return [self.work_dir / f"case{i}" for i in range(self.n_cases)]
-        else:
-            return [self.work_dir]
 
     def run_before_graph_execution(
         self,

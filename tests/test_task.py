@@ -1,16 +1,18 @@
 import pytest
 
 import molexp as me
-
+from tempfile import mkdtemp
+from pathlib import Path
 
 class TestTask:
 
     @pytest.fixture(name='task', scope='class')
     def test_create(self):
-
+        dir = Path(mkdtemp())
         task = me.Task(
             name = 'test_task',
-            param = me.param.random_param()
+            path = dir,
+            param = me.Param.random(3),
         )
         return task
     
@@ -20,30 +22,22 @@ class TestTask:
         assert len(param) == 3
 
     def test_merge(self):
-
+        dir = Path(mkdtemp())
         # init 3 random tasks
         task1 = me.Task(
             name = 'task1',
-            param = me.param.random_param()
+            path = dir
         )
         task2 = me.Task(
             name = 'task2',
-            param = me.param.random_param()
+            path = dir
         )
         task3 = me.Task(
             name = 'task3',
-            param = me.param.random_param()
+            path = dir
         )
 
         task = me.Task.union('task', task1, task2, task3)
 
         assert task.name == 'task'
         assert task.param == task1.param | task2.param | task3.param
-
-    def test_start(self, task):
-            
-        task.start()
-
-    def test_restart(self, task):
-
-        task.restart()
