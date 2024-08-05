@@ -20,6 +20,7 @@ from hamilton.lifecycle.default import CacheAdapter
 
 import molexp as me
 from molexp.experiment import Experiment
+from typing import Iterable, Callable, Any
 
 
 class Project:
@@ -79,7 +80,7 @@ class Project:
 
     def get_exp(self, name: str) -> Experiment:
         return self.experiments.get_by_name(name)
-    
+
     def get_tasks(self, path: str) -> list[me.Task]:
         path_list = reversed(path.split("/"))
 
@@ -91,14 +92,19 @@ class Project:
     def ls(self):
         return self.experiments
 
-    def _get_driver(self, exp: me.Experiment, task: me.Task, config: dict) -> driver.Driver:
+    def _get_driver(
+        self, task: me.Task, config: dict, exp: me.Experiment | None = None
+    ) -> driver.Driver:
 
-        exp_tracker = exp.get_tracker()
-        task_tracker = task.get_tracker()
         modules = set()
-        modules.add(exp.modules)
-        modules.add(task.modules)
-        adapters = [exp_tracker, task_tracker]
+
+        modules.update(set(task.modules))
+        task_tracker = task.get_tracker()
+        adapters = [task_tracker]
+        if exp is not None:
+            exp_tracker = exp.get_tracker()
+            adapters.append(exp_tracker)
+            modules.update(set(exp.modules))
         cache_dir = task_tracker.work_dir / ".cache"
         cache_dir.mkdir(exist_ok=True)
         cache_adapter = CacheAdapter(cache_path=str(cache_dir / "cache"))
@@ -113,34 +119,67 @@ class Project:
 
         return dr
 
-    def start_task(self, path: str, param: me.Param, final_vars: list[str] = [], config: dict = {}):
+    def start_task(
+        self,
+        task: me.Task,
+        param: me.Param = me.Param(),
+        final_vars: list[str] = [],
+        config: dict = {},
+    ):
 
-        tasks = self.get_tasks(path)
-
-        if len(tasks) > 1:
-            raise ValueError("Only one task can be started at a time")
-
-        dr = self._get_driver(path, config)
+        dr = self._get_driver(task, config)
         if not final_vars:
             final_vars = dr.list_available_variables()
 
-        params = tasks.param
-        params |= param
+        task.param |= param
+        dr.execute(final_vars=final_vars, inputs=task.param)
 
-        dr.execute(final_vars=final_vars, inputs=params)
+    def restart_task(
+        self, task: me.Task, param: me.Param, final_vars: list[str] = [], config: dict = {}
+    ):
 
-    def restart_task(self, path: str, param: me.Param, final_vars: list[str] = [], config: dict = {}):
+        # clean up the cache
+        cache_dir = task.get_tracker().work_dir / ".cache"
+        cache_dir.unlink()
 
-        tasks = self.get_tasks(path)
+        self.start_task(task, param, final_vars, config)
 
-        if len(tasks) > 1:
-            raise ValueError("Only one task can be started at a time")
+    def start_tasks(
+        self,
+        tasks: list[me.Task],
+        params: list[me.Param] = [],
+        final_vars: list[str] = [],
+        config: dict = {},
+        reducer_fn: Callable = lambda x: x,
+    ):
+        from hamilton.htypes import Parallelizable, Collect
+        from hamilton import ad_hoc_utils
+        from hamilton.execution.executors import ExecutionManager
 
-        dr = self._get_driver(path, config)
-        if not final_vars:
-            final_vars = dr.list_available_variables()
+        if not params:
+            params = [me.Param() for _ in range(len(tasks))]
 
-        params = tasks.param
-        params |= param
+        def mapper(tasks: list[me.Task], params: list[me.Param]) -> Parallelizable[Any]:
+            for task, param in zip(tasks, params):
+                dr = self._get_driver(task, config)
+                task.param |= param
+                yield dr.execute(inputs=task.param, final_vars=final_vars)
 
-        dr.execute(final_vars=final_vars, inputs=params)
+        def reducer(mapper: Collect[Any]) -> Any:
+
+            return reducer_fn(mapper)
+
+        temp_module = ad_hoc_utils.create_temporary_module(
+            mapper,
+            reducer,
+            module_name="start_tasks_mapper_reducer",
+        )
+
+        dr = (
+            driver.Builder()
+            .with_modules(temp_module)
+            .enable_dynamic_execution(allow_experimental_mode=True)
+            .with_remote_executor(executors.MultiProcessingExecutor(8))
+            .build()
+        )
+        dr.execute(final_vars=["reducer"], inputs={"tasks": tasks, "params": params})

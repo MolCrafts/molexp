@@ -5,6 +5,7 @@ from typing import Any
 import os, types
 from enum import IntEnum
 
+
 class Task:
 
     class Status(IntEnum):
@@ -29,36 +30,37 @@ class Task:
         self.modules = modules
         self.dep_files = dep_files
 
+        self.work_dir = self.path / self.name
+
     def init(self):
-        if not self.path.exists():
-            self.path.mkdir(parents=True, exist_ok=True)
+        self.work_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def load(cls, state: dict):
         ins = cls(
-            state['name'],
-            state['path'],
-            state['param'],
-            state['config'],
-            state['modules'],
-            state['dep_files'],
+            state["name"],
+            state["path"],
+            state["param"],
+            state["config"],
+            state["modules"],
+            state["dep_files"],
         )
         ins.init()
         return cls
-    
+
     def __getstate__(self):
         return self.get_state()
-    
+
     def __setstate__(self, state):
         self.__dict__.update(state)
-    
+
     def get_state(self):
         return {
-            'name': self.name,
-            'param': self.param,
-            'config': self.config,
-            'modules': self.modules,
-            'dep_files': self.dep_files,
+            "name": self.name,
+            "param": self.param,
+            "config": self.config,
+            "modules": self.modules,
+            "dep_files": self.dep_files,
         }
 
     @classmethod
@@ -73,17 +75,17 @@ class Task:
             modules += task.modules
             dep_files += task.dep_files
         return cls(
-            name = name,
-            path = tasks[0].path,
-            param = param,
-            modules = modules,
-            config = config,
-            dep_files = dep_files,
+            name=name,
+            path=tasks[0].path,
+            param=param,
+            modules=modules,
+            config=config,
+            dep_files=dep_files,
         )
 
     def __repr__(self):
         return f"<Task: {self.name}>"
-    
+
     def __or__(self, other: "Task") -> "Task":
         return Task.union(self.name, self, other)
 
@@ -93,8 +95,8 @@ class Task:
     def get_config(self):
         return self.config
 
-    def get_tracker(self, work_dir: str | Path = Path.cwd()):
-        return TaskTracker(self.name, self.param, self.config, work_dir, self.dep_files)
+    def get_tracker(self):
+        return TaskTracker(self.name, self.param, self.config, self.work_dir, self.dep_files)
 
 
 class Tasks(list):
@@ -139,23 +141,7 @@ class TaskTracker(
         self.config = config
         self.dep_files = dep_files
 
-        self.init_dir = Path(work_dir)
-        self.work_dir = Path(work_dir).resolve().joinpath(name)
-
-        self.meta: dict = {}
-        self.work_dir.mkdir(parents=True, exist_ok=True)
-
-        for dep in dep_files:
-            task_name, file_name = dep.split("/")
-            task_path = self.init_dir / task_name
-            if not task_path.exists():
-                raise FileNotFoundError(f"Task {task_name} not found.")
-
-            for file in task_path.glob(file_name):
-                file_link = self.work_dir / file.name
-                if file_link.exists():
-                    file_link.unlink()
-                file_link.symlink_to(file)
+        self.work_dir = Path(work_dir)
 
     def run_before_node_execution(
         self,
@@ -169,6 +155,7 @@ class TaskTracker(
         node_input_types: dict[str, Any],
         **future_kwargs: Any,
     ):
+        self.init_dir = Path.cwd()
         os.chdir(self.work_dir)
 
     def run_after_node_execution(

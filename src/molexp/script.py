@@ -3,10 +3,8 @@ from pathlib import Path
 
 class Script:
 
-    def __init__(self, name:str, type_:str, content:str=""):
+    def __init__(self, name:str):
         self.name = name
-        self.type = type_
-        self.content = content
 
     def __str__(self) -> str:
         return self.content

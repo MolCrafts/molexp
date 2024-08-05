@@ -30,7 +30,7 @@ class TestProject:
         assert exp2.path == proj.work_dir
         exp3 = proj.def_exp(name="exp3")
         assert exp3.path == proj.work_dir
-        assert len(proj.ls())== 3
+        assert len(proj.ls()) == 3
 
     def test_list_exp(self, proj):
 
@@ -50,6 +50,22 @@ class TestProject:
     def test_start_task(self, proj: me.Project):
 
         exp1 = proj.get_exp("exp1")
+        task1 = exp1.get_task("task1")
+        proj.start_task(task1, final_vars={"a": 1, "b": 2})
+
+    def test_start_tasks(self, proj: me.Project):
+
+        exp2 = proj.get_exp("exp2")
+        task1 = exp2.def_task("task1", modules=[logic])
+        task2 = exp2.def_task("task2", modules=[logic])
+        task3 = exp2.def_task("task3", modules=[logic])
+        task4 = exp2.def_task("task4", modules=[logic])
+
+        proj.start_tasks(
+            [task1, task2, task3, task4],
+            params=[{"a": "1", "b": 2, "c": 3.0}, {"a": "2", "b": 3, "c": 4.0}, {"a": "3", "b": 4, "c": 5.0}, {"a": "4", "b": 5, "c": 6.0}],
+            final_vars=["sleep_report_step"],
+        )
 
     # def test_restart_all(self, proj: me.Project):
 
@@ -58,5 +74,3 @@ class TestProject:
     # def test_restart_exp(self, proj: me.Project):
 
     # def test_restart_task(self, proj: me.Project):
-
-    

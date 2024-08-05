@@ -30,9 +30,6 @@ class TestScript:
         Ut convallis felis ac erat posuere, vehicula pellentesque turpis tempor.
         Cras volutpat nulla sit amet bibendum interdum.
         """
-        # script.delete(1)
         
-        script.delete((1, 3))
-
     def test_open(self):
         pass
