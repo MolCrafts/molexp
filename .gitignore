@@ -186,3 +186,7 @@ thumb
 sketch
 
 openapi.json
+
+# Compiled frontend bundle (populated by `npm run build:ui`)
+src/molexp/_webapp/*
+!src/molexp/_webapp/.gitkeep

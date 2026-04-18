@@ -1,23 +1,23 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import type {
+  AgentSelection,
+  FileKind,
   LeftPanelView,
   Selection,
   SemanticObjectType,
-  WorkspaceFileSelection,
   WorkflowSelection,
-  FileKind,
+  WorkspaceFileSelection,
 } from "@/app/types";
 
-const DEFAULT_VIEW: LeftPanelView = "project";
+const DEFAULT_VIEW: LeftPanelView = "projects";
 
 const viewParamValues: LeftPanelView[] = [
   "workspace",
-  "project",
-  "experiment",
-  "run",
+  "projects",
   "asset",
   "workflow",
+  "agent",
 ];
 
 const objectTypeValues: SemanticObjectType[] = [
@@ -27,6 +27,7 @@ const objectTypeValues: SemanticObjectType[] = [
   "asset",
   "workflow",
   "workspace-file",
+  "agent",
 ];
 
 const fileKindValues: FileKind[] = [
@@ -86,6 +87,11 @@ const buildSelection = (
       workflowId: workflowId ?? objectId,
     };
     return workflowSelection;
+  }
+
+  if (objectType === "agent") {
+    const agentSelection: AgentSelection = { objectType: "agent", objectId };
+    return agentSelection;
   }
 
   return {

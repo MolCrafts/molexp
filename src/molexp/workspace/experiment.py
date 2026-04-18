@@ -1,12 +1,19 @@
-"""Experiment entity with run management.
+"""Experiment entity — one directory per parameter combination.
 
-An Experiment represents a research experiment with runtime behavior and references.
-Construction auto-generates metadata; persistence happens via materialize().
+An Experiment binds a workflow to a concrete set of parameters plus a
+replica configuration (``n_replicas`` × ``seeds``).  Replicas under the
+same Experiment share parameters; they differ only in their random seed.
+
+Construction is side-effect free; ``project.experiment(...)`` materializes
+on disk at call-time (idempotent: if an experiment with the same slug
+already exists, it is loaded and returned).
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+import asyncio
+import inspect
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,233 +21,243 @@ if TYPE_CHECKING:
     from .project import Project
     from .workspace import Workspace
 
-from .base import _save_metadata, _load_metadata, _reconstruct, _list_children
-from .metadata import ExperimentMetadata, RunMetadata
+from molexp.workflow.context import TaskContext
+from molexp.workflow.spec import WorkflowBuilder, WorkflowSpec
+from molexp.workflow.task import Task
+
+from .asset import AssetLibrary
+from .base import _list_children, _load_metadata, _reconstruct, _save_metadata
+from .models import ExperimentMetadata, RunMetadata, WorkflowSnapshotRef
 from .run import Run
 from .utils import generate_id
 
 
+# Default replica seeds — deterministic, well-separated
+_DEFAULT_SEEDS = [42, 123, 456, 789, 1234]
+
+
+class _EntryTask(Task):
+    """Wraps a bare ``fn(RunContext) -> None`` into a workflow Task."""
+
+    def __init__(self, fn: Callable) -> None:
+        self._fn = fn
+
+    async def execute(self, ctx: TaskContext) -> None:
+        run_ctx = ctx.run_context
+        if run_ctx is None:
+            raise RuntimeError(
+                f"{self._fn.__name__}() requires a RunContext, but the "
+                "workflow was executed without a workspace run."
+            )
+        result = self._fn(run_ctx)
+        if asyncio.iscoroutine(result) or inspect.isawaitable(result):
+            await result
+
+
+def _promote_to_workflow(fn: Callable, name: str) -> WorkflowSpec:
+    """Promote a bare ``fn(RunContext)`` to a single-Task WorkflowSpec."""
+    return WorkflowBuilder(name=name).add(_EntryTask(fn), name=fn.__name__).build()
+
+
 class Experiment:
-    """Research experiment container with runtime behavior.
-    
-    Construction is side-effect free and auto-generates metadata.
-    Filesystem operations happen explicitly via materialize().
-    
-    Example:
-        >>> # User provides only what they care about
-        >>> experiment = Experiment(
-        ...     name="Hyperparameter Search",
-        ...     project=project
-        ... )
-        >>> 
-        >>> # System fields auto-generated
-        >>> assert experiment.id  # UUID auto-generated
-        >>> assert experiment.metadata.created_at  # Timestamp auto-generated
-        >>> 
-        >>> # Workspace accessed via project (respects hierarchy)
-        >>> assert experiment.workspace is project.workspace
-        >>> 
-        >>> # No filesystem side effects yet
-        >>> # Explicitly materialize to disk
-        >>> experiment.materialize()  # NOW directories/files are created
+    """Repeatable experiment bound to a workflow and a concrete parameter set.
+
+    Example::
+
+        exp = project.experiment(
+            "lr-1e-3",
+            params={"lr": 1e-3},
+            n_replicas=3,
+        )
+        exp.set_workflow(train_fn)
     """
-    
+
     def __init__(
         self,
         name: str,
         project: Project,
         id: str | None = None,
-    ):
-        """Initialize experiment with user inputs and auto-generate metadata.
-
-        Args:
-            name: Human-readable experiment name (user input)
-            project: Parent project (runtime dependency)
-            id: Optional custom ID (if None, auto-generates UUID)
-        """
+        *,
+        params: dict[str, Any] | None = None,
+        n_replicas: int = 1,
+        seeds: list[int] | None = None,
+        workflow_source: str | None = None,
+        workflow_type: str | None = None,
+        git_commit: str | None = None,
+    ) -> None:
         self.project = project
-
-        # Auto-generate metadata with system fields
         self.metadata = ExperimentMetadata(
             id=id if id is not None else generate_id(),
             name=name,
-            created_at=datetime.now(),  # Auto-generated timestamp
-            updated_at=datetime.now(),
-            description="",
-            tags=[],
-            config={},
+            workflow_source=workflow_source,
+            workflow_type=workflow_type,
+            parameter_space=dict(params) if params else {},
+            git_commit=git_commit,
+            n_replicas=n_replicas,
+            seeds=list(seeds) if seeds is not None else None,
         )
-        
-        # Runtime-only cache
-        self._assets_lib = None
-    
-    # Property proxies for convenient access to metadata fields
-    
+        self._assets_lib: AssetLibrary | None = None
+        self._workflow: WorkflowSpec | None = None
+
+    # ── Properties ──────────────────────────────────────────────────────
+
     @property
     def id(self) -> str:
-        """Experiment identifier."""
         return self.metadata.id
-    
+
     @property
     def name(self) -> str:
-        """Human-readable experiment name."""
         return self.metadata.name
-    
+
     @property
     def created_at(self):
-        """Creation timestamp."""
         return self.metadata.created_at
-    
-    @property
-    def updated_at(self):
-        """Last update timestamp."""
-        return self.metadata.updated_at
-    
+
     @property
     def description(self) -> str:
-        """Experiment description."""
         return self.metadata.description
 
     @property
     def tags(self) -> list[str]:
-        """Experiment tags."""
         return self.metadata.tags
 
     @property
-    def config(self) -> dict[str, Any]:
-        """Experiment configuration."""
-        return self.metadata.config
-    
+    def workflow_source(self) -> str | None:
+        return self.metadata.workflow_source
+
+    @property
+    def parameter_space(self) -> dict[str, Any]:
+        return self.metadata.parameter_space
+
+    @property
+    def params(self) -> dict[str, Any]:
+        """Concrete parameter dict bound to this experiment."""
+        return self.metadata.parameter_space
+
+    @property
+    def n_replicas(self) -> int:
+        return self.metadata.n_replicas
+
+    @property
+    def seeds(self) -> list[int] | None:
+        return self.metadata.seeds
+
+    @property
+    def workflow(self) -> WorkflowSpec | None:
+        """The bound workflow (always ``WorkflowSpec`` or ``None``)."""
+        return self._workflow
+
     @property
     def workspace(self) -> Workspace:
-        """Access workspace through project (respects hierarchy)."""
         return self.project.workspace
-    
+
     @property
-    def assets(self):
-        """Experiment-level asset library."""
-        from .asset import AssetLibrary
-        
-        assets_dir = (
-            self.workspace.root / "projects" / self.project.id / 
-            "experiments" / self.id / "assets"
-        )
+    def experiment_dir(self) -> Path:
+        return self.project.project_dir / "experiments" / self.id
+
+    @property
+    def assets(self) -> AssetLibrary:
         if self._assets_lib is None:
-            self._assets_lib = AssetLibrary(assets_dir)
+            self._assets_lib = AssetLibrary(self.experiment_dir / "assets")
         return self._assets_lib
-    
-    def materialize(self) -> None:
-        """Create filesystem structure and persist metadata.
 
-        This is the explicit side-effect method that:
-        - Creates experiment directory
-        - Writes metadata JSON file
-        - Initializes subdirectories (assets, runs)
-        """
-        experiment_dir = (
-            self.workspace.root / "projects" / self.project.id /
-            "experiments" / self.id
-        )
-        experiment_dir.mkdir(parents=True, exist_ok=True)
-        _save_metadata(self.metadata, experiment_dir / "experiment.json")
-    
-    def save(self) -> None:
-        """Save updated metadata to disk."""
-        experiment_dir = (
-            self.workspace.root / "projects" / self.project.id /
-            "experiments" / self.id
-        )
-        self.metadata.updated_at = datetime.now()
-        _save_metadata(self.metadata, experiment_dir / "experiment.json")
-    
-    def create_run(self, parameters: dict[str, Any] | None = None, id: str | None = None, exist_ok: bool = False) -> Run:
-        """Create run in this experiment.
+    # ── Workflow binding ────────────────────────────────────────────────
 
-        Args:
-            parameters: Run parameters (user input)
-            id: Optional custom run ID (if None, auto-generates UUID)
-            exist_ok: If True, always create new run (runs don't have names to match by)
-                     Only useful with custom id to load existing run by ID
+    def set_workflow(self, workflow: WorkflowSpec | Callable) -> None:
+        """Bind a workflow to this experiment.
 
-        Returns:
-            Created Run (already materialized)
+        Accepts a compiled :class:`WorkflowSpec` or a bare ``fn(RunContext)``
+        callable; callables are auto-promoted to a single-Task ``WorkflowSpec``.
 
         Raises:
-            ValueError: If run with this ID already exists and exist_ok=False
-
-        Note:
-            Unlike create_project/create_experiment, runs don't have unique names,
-            so exist_ok only works when a custom id is provided. Without custom id,
-            a new run is always created (since each run should represent a new execution).
+            TypeError: If *workflow* is not a ``WorkflowSpec`` or callable.
+            ValueError: If a workflow is already bound.
         """
-        # Construct run (no side effects)
-        run = Run(
+        if self._workflow is not None:
+            raise ValueError(
+                f"Experiment {self.name!r} already has a workflow bound."
+            )
+        if isinstance(workflow, WorkflowSpec):
+            self._workflow = workflow
+        elif callable(workflow):
+            self._workflow = _promote_to_workflow(workflow, self.name)
+        else:
+            raise TypeError(
+                f"Expected WorkflowSpec or callable, got {type(workflow).__name__}"
+            )
+
+    def get_seeds(self) -> list[int]:
+        """Return replica seeds (length == ``n_replicas``)."""
+        seeds = self.metadata.seeds
+        if seeds is not None:
+            return list(seeds[: self.n_replicas])
+        out = list(_DEFAULT_SEEDS)
+        while len(out) < self.n_replicas:
+            out.append(out[-1] + 111)
+        return out[: self.n_replicas]
+
+    # ── Persistence ─────────────────────────────────────────────────────
+
+    def materialize(self) -> None:
+        """Create filesystem structure and persist metadata (non-recursive)."""
+        self.experiment_dir.mkdir(parents=True, exist_ok=True)
+        _save_metadata(self.metadata, self.experiment_dir / "experiment.json")
+
+    def save(self) -> None:
+        """Persist current metadata to disk."""
+        _save_metadata(self.metadata, self.experiment_dir / "experiment.json")
+
+    # ── Run operations ──────────────────────────────────────────────────
+
+    def run(
+        self,
+        parameters: dict[str, Any] | None = None,
+        *,
+        id: str | None = None,
+    ) -> Run:
+        """Get-or-create a run (idempotent, materialized immediately).
+
+        If a run with the same ID already exists on disk, load and return it.
+        Otherwise, construct + materialize a new Run.
+        """
+        snapshot = None
+        if self.metadata.workflow_source:
+            snapshot = WorkflowSnapshotRef(
+                source=self.metadata.workflow_source,
+                git_commit=self.metadata.git_commit,
+            )
+
+        r = Run(
             experiment=self,
             parameters=parameters,
             id=id,
+            workflow_snapshot=snapshot,
         )
-
-        # Check if run already exists by ID
-        run_dir = (
-            self.workspace.root / "projects" / self.project.id /
-            "experiments" / self.id / "runs" / run.id
-        )
+        run_dir = self.experiment_dir / "runs" / f"run-{r.id}"
         if run_dir.exists():
-            if exist_ok:
-                # Load existing run
-                metadata_file = run_dir / "run.json"
-                if metadata_file.exists():
-                    from .base import _load_metadata, _reconstruct
-                    from .metadata import RunMetadata
-                    metadata = _load_metadata(RunMetadata, metadata_file)
-                    attrs = {
-                        'metadata': metadata,
-                        'experiment': self,
-                    }
-                    return _reconstruct(Run, attrs)
-            raise ValueError(f"Run '{run.id}' already exists")
+            return self._load_run_from_dir(run_dir)
+        r.materialize()
+        return r
 
-        # Explicitly materialize
-        run.materialize()
-
-        return run
-    
     def get_run(self, run_id: str) -> Run | None:
-        """Get run by ID (load from disk).
-
-        Args:
-            run_id: Run UUID
-
-        Returns:
-            Run object if found, None otherwise
-        """
-        run_dir = (
-            self.workspace.root / "projects" / self.project.id / "experiments" /
-            self.id / "runs" / run_id
-        )
-
+        """Get run by ID."""
+        run_dir = self.experiment_dir / "runs" / f"run-{run_id}"
         if not run_dir.exists():
             return None
+        return self._load_run_from_dir(run_dir)
 
-        metadata = _load_metadata(RunMetadata, run_dir / "run.json")
-        return _reconstruct(Run, {
-            "experiment": self,
-            "metadata": metadata,
-        })
-    
     def list_runs(self) -> list[Run]:
-        """List runs in this experiment.
-
-        Returns:
-            List of Run objects
-        """
+        """List all runs by scanning the ``runs/`` directory."""
         return _list_children(
-            children_dir=(
-                self.workspace.root / "projects" / self.project.id / "experiments" /
-                self.id / "runs"
-            ),
+            children_dir=self.experiment_dir / "runs",
             metadata_filename="run.json",
             metadata_cls=RunMetadata,
             child_cls=Run,
             attrs_factory=lambda m: {"experiment": self, "metadata": m},
         )
+
+    # ── Internal ────────────────────────────────────────────────────────
+
+    def _load_run_from_dir(self, run_dir: Path) -> Run:
+        meta = _load_metadata(RunMetadata, run_dir / "run.json")
+        return _reconstruct(Run, {"experiment": self, "metadata": meta})

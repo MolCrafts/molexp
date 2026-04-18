@@ -6,6 +6,7 @@
  */
 
 import type {
+    ApiAgentSession,
     ApiProjectResponse,
     ApiExperimentResponse,
     ApiRunResponse,
@@ -33,6 +34,7 @@ interface MockDatabase {
     experiments: Map<string, ApiExperimentResponse>;
     runs: Map<string, ApiRunResponse>;
     assets: Map<string, ApiAssetResponse>;
+    agentSessions: Map<string, ApiAgentSession>;
     files: Map<string, FileNode>; // path -> node
     runLogs: Map<string, string[]>; // runId -> log lines
 }
@@ -59,6 +61,7 @@ function createEmptyDb(): MockDatabase {
         experiments: new Map(),
         runs: new Map(),
         assets: new Map(),
+        agentSessions: new Map(),
         files: new Map(),
         runLogs: new Map(),
     };
@@ -177,7 +180,13 @@ export function seed(): void {
                 gitCommit: "a1b2c3d",
                 serializedGraph: null,
             },
-            executorInfo: { backend: "local" },
+            executorInfo: {
+                backend: "molq",
+                scheduler: "slurm",
+                cluster_name: "default",
+                job_id: "molq-101",
+                scheduler_job_id: "421337",
+            },
             workingDir: "/tmp/molexp/run-001",
             logsDir: "/tmp/molexp/run-001/logs",
             assetRefs: {
@@ -542,6 +551,132 @@ outputs:
     };
 
     fileTree.forEach(addToFileMap);
+
+    // Agent sessions
+    const agentSessions: ApiAgentSession[] = [
+        {
+            sessionId: "sess-001",
+            status: "completed",
+            goalDescription: "Run the AlphaFold baseline experiment and summarise the results",
+            createdAt: isoAt(-180),
+            events: [
+                {
+                    type: "PlanCreatedEvent",
+                    ts: isoAt(-179),
+                    payload: {
+                        plan_steps: [
+                            "List existing experiments in protein-folding project",
+                            "Create a run for exp-001 with default parameters",
+                            "Wait for run completion",
+                            "Retrieve run summary and asset outputs",
+                        ],
+                    },
+                },
+                {
+                    type: "ToolCallEvent",
+                    ts: isoAt(-178),
+                    payload: { tool_name: "list_experiments", args: { project_id: "protein-folding" } },
+                },
+                {
+                    type: "ToolResultEvent",
+                    ts: isoAt(-178),
+                    payload: { tool_name: "list_experiments", result: ["exp-001 — AlphaFold Baseline", "exp-002 — Structure Sweep"] },
+                },
+                {
+                    type: "ToolCallEvent",
+                    ts: isoAt(-177),
+                    payload: { tool_name: "create_run", args: { project_id: "protein-folding", experiment_id: "exp-001", parameters: { batch_size: 32 } } },
+                },
+                {
+                    type: "ToolResultEvent",
+                    ts: isoAt(-177),
+                    payload: { tool_name: "create_run", result: { run_id: "run-001", status: "pending" } },
+                },
+                {
+                    type: "WorkflowStartedEvent",
+                    ts: isoAt(-176),
+                    payload: { run_id: "run-001", workflow_id: "exp-001" },
+                },
+                {
+                    type: "ObservationEvent",
+                    ts: isoAt(-120),
+                    payload: { content: "Run run-001 completed successfully. Output model saved to asset-003." },
+                },
+                {
+                    type: "SessionCompletedEvent",
+                    ts: isoAt(-119),
+                    payload: {
+                        summary: "AlphaFold baseline run completed. Model checkpoint saved as asset-003 (20 MB). Val loss: 0.032.",
+                        produced_runs: ["run-001"],
+                    },
+                },
+            ],
+        },
+        {
+            sessionId: "sess-002",
+            status: "completed",
+            goalDescription: "Screen catalyst library L1–L3 and report top candidates",
+            createdAt: isoAt(-90),
+            events: [
+                {
+                    type: "PlanCreatedEvent",
+                    ts: isoAt(-89),
+                    payload: {
+                        plan_steps: [
+                            "Locate catalyst-search project and exp-101",
+                            "Create run with ligand parameter sweep",
+                            "Analyse output candidates.csv",
+                        ],
+                    },
+                },
+                {
+                    type: "ToolCallEvent",
+                    ts: isoAt(-88),
+                    payload: { tool_name: "list_experiments", args: { project_id: "catalyst-search" } },
+                },
+                {
+                    type: "ToolResultEvent",
+                    ts: isoAt(-88),
+                    payload: { tool_name: "list_experiments", result: ["exp-101 — Catalyst Sweep"] },
+                },
+                {
+                    type: "WorkflowStartedEvent",
+                    ts: isoAt(-87),
+                    payload: { run_id: "run-101" },
+                },
+                {
+                    type: "SessionCompletedEvent",
+                    ts: isoAt(-50),
+                    payload: {
+                        summary: "Top 2 candidates identified: L2 (η = 0.87) and L1 (η = 0.81). Results written to candidates.csv.",
+                        produced_runs: ["run-101"],
+                    },
+                },
+            ],
+        },
+        {
+            sessionId: "sess-003",
+            status: "pending",
+            goalDescription: "Prepare a validated dataset from qm9.h5 and run a GNN baseline on it",
+            createdAt: isoAt(-5),
+            events: [
+                {
+                    type: "PlanCreatedEvent",
+                    ts: isoAt(-4),
+                    payload: {
+                        plan_steps: [
+                            "Validate qm9.h5 schema and integrity",
+                            "Create preprocessing experiment",
+                            "Run GNN baseline experiment",
+                            "Evaluate val_loss < 0.05",
+                        ],
+                    },
+                },
+            ],
+        },
+    ];
+
+    agentSessions.forEach((s) => db.agentSessions.set(s.sessionId, s));
 }
 
 /**
@@ -654,10 +789,34 @@ export function getAllAssets(): ApiAssetResponse[] {
 }
 
 /**
+ * Get assets scoped to a project.
+ */
+export function getAssetsByProject(projectId: string): ApiAssetResponse[] {
+    if (projectId === "protein-folding") {
+        return Array.from(db.assets.values()).filter((asset) =>
+            asset.id === "asset-001" || asset.id === "asset-003"
+        );
+    }
+
+    if (projectId === "catalyst-search") {
+        return Array.from(db.assets.values()).filter((asset) => asset.id === "asset-002");
+    }
+
+    return [];
+}
+
+/**
  * Get asset by ID
  */
 export function getAsset(id: string): ApiAssetResponse | undefined {
     return db.assets.get(id);
+}
+
+/**
+ * Add or update an asset.
+ */
+export function setAsset(asset: ApiAssetResponse): void {
+    db.assets.set(asset.id, asset);
 }
 
 /**
@@ -675,6 +834,31 @@ export function getFileTree(): FileNode[] {
  */
 export function getFile(path: string): FileNode | undefined {
     return db.files.get(path);
+}
+
+/**
+ * Delete a file or folder by path.
+ */
+export function deleteFile(path: string): boolean {
+    const existing = db.files.get(path);
+    if (!existing) {
+        return false;
+    }
+
+    const prefix = path.endsWith("/") ? path : `${path}/`;
+    for (const candidatePath of Array.from(db.files.keys())) {
+        if (candidatePath === path || candidatePath.startsWith(prefix)) {
+            db.files.delete(candidatePath);
+        }
+    }
+
+    const parentPath = path.split("/").slice(0, -1).join("/") || "/";
+    const parent = db.files.get(parentPath);
+    if (parent?.children) {
+        parent.children = parent.children.filter((child) => child.path !== path);
+    }
+
+    return true;
 }
 
 /**
@@ -709,28 +893,6 @@ export function writeFile(path: string, content: string): void {
             parent.children.push(newFile);
         }
     }
-}
-
-/**
- * Delete a file
- */
-export function deleteFile(path: string): boolean {
-    const file = db.files.get(path);
-    if (!file) return false;
-
-    db.files.delete(path);
-
-    // Remove from parent's children
-    const parts = path.split("/").filter(Boolean);
-    if (parts.length > 1) {
-        const parentPath = "/" + parts.slice(0, -1).join("/");
-        const parent = db.files.get(parentPath);
-        if (parent && parent.children) {
-            parent.children = parent.children.filter((c) => c.path !== path);
-        }
-    }
-
-    return true;
 }
 
 /**
@@ -791,4 +953,20 @@ export function addRunLog(runId: string, line: string): void {
     const logs = db.runLogs.get(runId) || [];
     logs.push(line);
     db.runLogs.set(runId, logs);
+}
+
+// ============================================================================
+// Agent session accessors
+// ============================================================================
+
+export function getAllAgentSessions(): ApiAgentSession[] {
+    return Array.from(db.agentSessions.values());
+}
+
+export function getAgentSession(id: string): ApiAgentSession | undefined {
+    return db.agentSessions.get(id);
+}
+
+export function setAgentSession(session: ApiAgentSession): void {
+    db.agentSessions.set(session.sessionId, session);
 }

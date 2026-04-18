@@ -1,4 +1,9 @@
-export type LeftPanelView = "workspace" | "project" | "experiment" | "run" | "asset" | "workflow";
+export type LeftPanelView =
+  | "workspace"
+  | "projects"
+  | "asset"
+  | "workflow"
+  | "agent";
 
 export type SemanticObjectType =
   | "project"
@@ -6,7 +11,8 @@ export type SemanticObjectType =
   | "run"
   | "asset"
   | "workflow"
-  | "workspace-file";
+  | "workspace-file"
+  | "agent";
 
 export type BaseObjectType = "project" | "experiment" | "run" | "asset";
 
@@ -14,13 +20,7 @@ export type PanelKind = "editor" | "viewer" | "inspector";
 
 export type FileKind = "yaml" | "json" | "python" | "markdown" | "text" | "image" | "unknown";
 
-export type ContentType =
-  | "workflow-graph"
-  | "metadata"
-  | "log"
-  | "text"
-  | "metrics"
-  | "image";
+export type ContentType = "workflow-graph" | "metadata" | "log" | "text" | "metrics" | "image";
 
 export type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 
@@ -36,26 +36,30 @@ export type SemanticStatus =
   | "running"
   | "succeeded"
   | "failed"
-  | "failed"
   | "cancelled"
   | "skipped";
 
-import type { ProjectCreateRequest } from "../api/generated/models/ProjectCreateRequest";
 import type { ExperimentCreateRequest } from "../api/generated/models/ExperimentCreateRequest";
+import type { ProjectCreateRequest } from "../api/generated/models/ProjectCreateRequest";
 import type { RunCreateRequest } from "../api/generated/models/RunCreateRequest";
 
-export type { ProjectCreateRequest, ExperimentCreateRequest, RunCreateRequest };
+export type { ExperimentCreateRequest, ProjectCreateRequest, RunCreateRequest };
 
-import type { ProjectResponse } from "../api/generated/models/ProjectResponse";
-import type { ExperimentResponse } from "../api/generated/models/ExperimentResponse";
-import type { RunResponse } from "../api/generated/models/RunResponse";
-import type { AssetResponse } from "../api/generated/models/AssetResponse";
+import type { AgentSessionResponse } from "../api/generated/models/AgentSessionResponse";
 import type { AssetFileResponse } from "../api/generated/models/AssetFileResponse";
-import type { WorkflowSnapshotResponse } from "../api/generated/models/WorkflowSnapshotResponse";
-import type { ContextSnapshotResponse } from "../api/generated/models/ContextSnapshotResponse";
 import type { AssetRefResponse } from "../api/generated/models/AssetRefResponse";
 import type { AssetRefsResponse } from "../api/generated/models/AssetRefsResponse";
+import type { AssetResponse } from "../api/generated/models/AssetResponse";
+import type { CacheClearResponse } from "../api/generated/models/CacheClearResponse";
+import type { CacheStatsResponse } from "../api/generated/models/CacheStatsResponse";
+import type { ContextSnapshotResponse } from "../api/generated/models/ContextSnapshotResponse";
+import type { ExperimentResponse } from "../api/generated/models/ExperimentResponse";
+import type { ProjectResponse } from "../api/generated/models/ProjectResponse";
+import type { RunResponse } from "../api/generated/models/RunResponse";
 import type { RunSummary as ApiRunSummaryModel } from "../api/generated/models/RunSummary";
+import type { SessionEventResponse } from "../api/generated/models/SessionEventResponse";
+import type { TaskSnapshotResponse } from "../api/generated/models/TaskSnapshotResponse";
+import type { WorkflowSnapshotResponse } from "../api/generated/models/WorkflowSnapshotResponse";
 
 // Re-export as Api*Response for compatibility
 export type ApiProjectResponse = ProjectResponse;
@@ -68,6 +72,11 @@ export type ApiContextSnapshot = ContextSnapshotResponse;
 export type ApiAssetRef = AssetRefResponse;
 export type ApiAssetRefs = AssetRefsResponse;
 export type ApiRunSummary = ApiRunSummaryModel;
+export type ApiTaskSnapshot = TaskSnapshotResponse;
+export type ApiCacheStats = CacheStatsResponse;
+export type ApiCacheClear = CacheClearResponse;
+export type ApiAgentSession = AgentSessionResponse;
+export type ApiSessionEvent = SessionEventResponse;
 
 export interface ProjectSummary {
   id: string;
@@ -95,6 +104,7 @@ export interface RunSummary {
   updatedAt: string;
   projectId: string;
   experimentId: string;
+  executorInfo: Record<string, string>;
 }
 
 export interface AssetSummary {
@@ -116,6 +126,14 @@ export interface WorkflowSummary {
   projectId: string;
   experimentId: string;
   graph?: WorkflowGraph;
+}
+
+export interface AgentSessionSummary {
+  id: string;
+  goalDescription: string;
+  status: SemanticStatus;
+  createdAt: string;
+  eventCount: number;
 }
 
 export interface WorkflowNodeMetadata {
@@ -167,6 +185,7 @@ export interface WorkspaceSnapshot {
   runs: RunSummary[];
   assets: AssetSummary[];
   workflows: WorkflowSummary[];
+  agentSessions: AgentSessionSummary[];
   workspaceRoot: WorkspaceTreeNode | null;
   consoleEntries: ConsoleEntry[];
 }
@@ -189,19 +208,28 @@ export interface WorkspaceFileSelection {
   objectId: string;
 }
 
-export type Selection = ObjectSelection | WorkflowSelection | WorkspaceFileSelection;
+export interface AgentSelection {
+  objectType: "agent";
+  objectId: string; // session_id, or "new" for the goal-input state
+}
+
+export type Selection =
+  | ObjectSelection
+  | WorkflowSelection
+  | WorkspaceFileSelection
+  | AgentSelection;
 
 export type InspectorTarget =
   | {
-    kind: "object";
-    objectType: SemanticObjectType;
-    objectId: string;
-  }
+      kind: "object";
+      objectType: SemanticObjectType;
+      objectId: string;
+    }
   | {
-    kind: "workflow-node";
-    workflowId: string;
-    nodeId: string;
-  };
+      kind: "workflow-node";
+      workflowId: string;
+      nodeId: string;
+    };
 
 export interface RendererKey {
   objectType: SemanticObjectType;
@@ -219,3 +247,7 @@ export interface RendererProps {
   onRefresh: () => void;
 }
 
+export interface BreadcrumbItem {
+  label: string;
+  to?: string;
+}

@@ -4,9 +4,9 @@
  * No semantic meaning imposed - purely structural hierarchy
  */
 
+import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Folder, FolderOpen, File } from "lucide-react";
 
 interface TreeNodeProps {
   id: string;
@@ -15,7 +15,7 @@ interface TreeNodeProps {
   kind: "file" | "folder";
   children?: TreeNodeProps[];
   icon?: React.ReactNode;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 interface TreeProps {
@@ -37,23 +37,22 @@ interface TreeItemProps {
   renderNode?: (node: TreeNodeProps, defaultRender: React.ReactNode) => React.ReactNode;
 }
 
+interface TreeItemRendererProps {
+  node: TreeNodeProps;
+  level: number;
+  expandedIds?: Map<string, boolean>;
+  onToggle: (id: string) => void;
+  onSelect?: (node: TreeNodeProps) => void;
+  onContextMenu?: (node: TreeNodeProps, event: React.MouseEvent) => void;
+  renderNode?: (node: TreeNodeProps, defaultRender: React.ReactNode) => React.ReactNode;
+}
+
 /**
  * TreeItem - Individual tree node renderer
  * Follows VS Code explorer styling and interactions
  */
-const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
-  (
-    {
-      node,
-      level,
-      isExpanded,
-      onToggle,
-      onSelect,
-      onContextMenu,
-      renderNode,
-    },
-    ref
-  ) => {
+const TreeItem = React.forwardRef<HTMLButtonElement, TreeItemProps>(
+  ({ node, level, isExpanded, onToggle, onSelect, onContextMenu, renderNode }, ref) => {
     const hasChildren = node.children && node.children.length > 0;
     const isFolder = node.kind === "folder";
 
@@ -75,9 +74,10 @@ const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
     };
 
     const DefaultRender = (
-      <div
+      <button
+        type="button"
         ref={ref}
-        className="group flex items-center min-h-[28px] px-2 py-1 rounded-sm cursor-pointer select-none hover:bg-accent/50 transition-colors"
+        className="group flex items-center min-h-[28px] w-full px-2 py-1 rounded-sm cursor-pointer select-none hover:bg-accent/50 transition-colors text-left"
         style={{ paddingLeft: `${level * 12 + 4}px` }}
         onClick={handleSelect}
         onContextMenu={handleContextMenu}
@@ -87,20 +87,18 @@ const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
         {/* Expand/collapse toggle */}
         {isFolder && (
           <button
+            type="button"
             className={cn(
               "flex items-center justify-center w-5 h-5 mr-1 flex-shrink-0",
               "text-muted-foreground hover:text-foreground transition-colors",
-              hasChildren ? "cursor-pointer" : "cursor-default opacity-0"
+              hasChildren ? "cursor-pointer" : "cursor-default opacity-0",
             )}
             onClick={handleToggle}
             aria-label={isExpanded ? "Collapse" : "Expand"}
             disabled={!hasChildren}
           >
             <ChevronRight
-              className={cn(
-                "h-4 w-4 transition-transform",
-                isExpanded && "rotate-90"
-              )}
+              className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-90")}
             />
           </button>
         )}
@@ -121,10 +119,8 @@ const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
         </div>
 
         {/* Node label */}
-        <span className="truncate text-sm text-foreground flex-1">
-          {node.name}
-        </span>
-      </div>
+        <span className="truncate text-sm text-foreground flex-1">{node.name}</span>
+      </button>
     );
 
     return (
@@ -132,7 +128,7 @@ const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
         {renderNode ? renderNode(node, DefaultRender) : DefaultRender}
         {isFolder && isExpanded && hasChildren && (
           <div className="flex flex-col">
-            {node.children!.map(child => (
+            {node.children?.map((child) => (
               <TreeItemRenderer
                 key={child.id}
                 node={child}
@@ -155,7 +151,7 @@ const TreeItem = React.forwardRef<HTMLDivElement, TreeItemProps>(
         )}
       </div>
     );
-  }
+  },
 );
 TreeItem.displayName = "TreeItem";
 
@@ -163,19 +159,14 @@ TreeItem.displayName = "TreeItem";
  * TreeItemRenderer - Manages expanded state for tree items
  */
 const TreeItemRenderer = React.memo(
-  ({
-    node,
-    level,
-    expandedIds,
-    ...props
-  }: TreeItemProps & { expandedIds?: Map<string, boolean> }) => {
+  ({ node, level, expandedIds, onToggle, ...props }: TreeItemRendererProps) => {
     const [expandedState, setExpandedState] = React.useState(
-      expandedIds?.get(node.id) ?? level < 2
+      expandedIds?.get(node.id) ?? level < 2,
     );
 
     const handleToggle = (id: string) => {
       setExpandedState(!expandedState);
-      props.onToggle(id);
+      onToggle(id);
     };
 
     return (
@@ -187,7 +178,7 @@ const TreeItemRenderer = React.memo(
         {...props}
       />
     );
-  }
+  },
 );
 TreeItemRenderer.displayName = "TreeItemRenderer";
 
@@ -196,27 +187,19 @@ TreeItemRenderer.displayName = "TreeItemRenderer";
  * Manages expansion state globally
  */
 const Tree = React.forwardRef<HTMLDivElement, TreeProps>(
-  (
-    {
-      nodes,
-      onSelect,
-      onContextMenu,
-      defaultExpandedIds,
-      className,
-      renderNode,
-    },
-    ref
-  ) => {
-    const [expandedIds, setExpandedIds] = React.useState<Map<string, boolean>>(
-      () => {
-        const map = new Map<string, boolean>();
-        defaultExpandedIds?.forEach(id => map.set(id, true));
-        return map;
+  ({ nodes, onSelect, onContextMenu, defaultExpandedIds, className, renderNode }, ref) => {
+    const [expandedIds, setExpandedIds] = React.useState<Map<string, boolean>>(() => {
+      const map = new Map<string, boolean>();
+      if (defaultExpandedIds) {
+        for (const id of defaultExpandedIds) {
+          map.set(id, true);
+        }
       }
-    );
+      return map;
+    });
 
     const handleToggle = React.useCallback((id: string) => {
-      setExpandedIds(prev => {
+      setExpandedIds((prev) => {
         const next = new Map(prev);
         next.set(id, !next.get(id));
         return next;
@@ -233,13 +216,12 @@ const Tree = React.forwardRef<HTMLDivElement, TreeProps>(
 
     return (
       <div ref={ref} className={cn("flex flex-col", className)}>
-        {nodes.map(node => (
+        {nodes.map((node) => (
           <TreeItemRenderer
             key={node.id}
             node={node}
             level={0}
             expandedIds={expandedIds}
-            isExpanded={expandedIds.get(node.id) ?? false}
             onToggle={handleToggle}
             onSelect={onSelect}
             onContextMenu={onContextMenu}
@@ -248,7 +230,7 @@ const Tree = React.forwardRef<HTMLDivElement, TreeProps>(
         ))}
       </div>
     );
-  }
+  },
 );
 Tree.displayName = "Tree";
 
