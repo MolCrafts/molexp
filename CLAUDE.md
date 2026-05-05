@@ -213,6 +213,15 @@ ui/src/  →  (npm run build:ui)  →  src/molexp/_webapp/  →  (hatchling)  �
 3. Add entity type mapping in `ui/src/app/registry.ts`
 4. Add test fixture in `ui/src/__fixtures__/`
 
+### Frontend conventions
+
+> **Frontend conventions**
+> - Prefer shadcn/ui components when implementing UI features.
+> - Avoid hand-rolling primitives (button, input, dialog, etc.) when a
+>   shadcn component fits.
+> - When a shadcn component does not fit, document the reason in the PR
+>   description.
+
 ### Test Organization
 
 Tests mirror source structure:
