@@ -168,6 +168,10 @@ Key patterns:
 - `mocks/handlers/` — MSW handlers for `dev:mock` mode; keep in sync with API changes
 - `resolvers/` — Entity resolution for rendering dispatch
 
+Component library preference:
+- Prefer **shadcn/ui** components when implementing UI features.
+- When a shadcn component does not fit, **document the reason in the PR description**.
+
 ### Packaging & Frontend Serving
 
 The React frontend is **compiled ahead of time by npm** and bundled inside the Python package — matching the `molvis` release workflow. `pip install` / `python -m build` **never** invokes npm.
