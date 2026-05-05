@@ -226,6 +226,12 @@ tests/
 
 Each test directory has `conftest.py` for shared fixtures. Use `conftest.py` at directory level, not standalone fixture files.
 
+## Frontend conventions
+
+- Prefer shadcn/ui components when implementing UI features.
+- Avoid hand-rolling primitives (button, input, dialog, etc.) when a shadcn component fits.
+- When a shadcn component does not fit, document the reason in the PR description.
+
 ## Skills (`.claude/skills/`)
 
 | Skill | Trigger | Purpose |
